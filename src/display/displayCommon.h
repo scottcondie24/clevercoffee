@@ -246,23 +246,23 @@ bool displayShottimer() {
 
         if (machineState != kManualFlush) {
             u8g2.drawXBMP(-1, 11, Brew_Cup_Logo_width, Brew_Cup_Logo_height, Brew_Cup_Logo);
+#if (FEATURE_SCALE == 1)
+            u8g2.setFont(u8g2_font_profont22_tf);
+            u8g2.setCursor(64, 15);
+            u8g2.print(timeBrewed / 1000, 1);
+            u8g2.print("s");
+            u8g2.setCursor(64, 38);
+            u8g2.print(weightBrewed, 1);
+            u8g2.print("g");
+            u8g2.setFont(u8g2_font_profont11_tf);
+#else
+            displayBrewtime(48, 25, timeBrewed);
+#endif
         }
         else {
             u8g2.drawXBMP(0, 12, Manual_Flush_Logo_width, Manual_Flush_Logo_height, Manual_Flush_Logo);
+            displayBrewtime(48, 25, timeBrewed);
         }
-
-#if (FEATURE_SCALE == 1)
-        u8g2.setFont(u8g2_font_profont22_tf);
-        u8g2.setCursor(64, 15);
-        u8g2.print(timeBrewed / 1000, 1);
-        u8g2.print("s");
-        u8g2.setCursor(64, 38);
-        u8g2.print(weightBrew, 1);
-        u8g2.print("g");
-        u8g2.setFont(u8g2_font_profont11_tf);
-#else
-        displayBrewtime(48, 25, timeBrewed);
-#endif
 
         displayWaterIcon(119, 1);
         u8g2.sendBuffer();

@@ -555,14 +555,16 @@ int sendHASSIODiscoveryMsg() {
 
 #if FEATURE_SCALE == 1
 
-    DiscoveryObject currentWeight = GenerateSensorDevice("currentWeight", "Weight", "g", "weight");
+    DiscoveryObject currWeight = GenerateSensorDevice("currWeight", "Weight", "g", "weight");
+    DiscoveryObject weightBrewed = GenerateSensorDevice("weightBrewed", "Weight brewed", "g", "weight");
 
     DiscoveryObject scaleCalibrateButton = GenerateButtonDevice("scaleCalibrationOn", "Calibrate Scale");
     DiscoveryObject scaleTareButton = GenerateButtonDevice("scaleTareOn", "Tare Scale");
 
     DiscoveryObject weightSetpoint = GenerateNumberDevice("weightSetpoint", "Weight setpoint", WEIGHTSETPOINT_MIN, WEIGHTSETPOINT_MAX, 0.1, "g");
 
-    discoveryObjects.push_back(currentWeight);
+    discoveryObjects.push_back(currWeight);
+    discoveryObjects.push_back(weightBrewed);
     discoveryObjects.push_back(scaleCalibrateButton);
     discoveryObjects.push_back(scaleTareButton);
     discoveryObjects.push_back(weightSetpoint);

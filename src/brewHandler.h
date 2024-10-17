@@ -6,9 +6,9 @@
  */
 // TODO:
 //  Flush Timer configurable and seperated from shottimer?
-//  check all Scale stuff
 //  show heating logo if steam temp isn´t reached?
 //  show sections on website only if needed
+//  add pressure to shot timer?
 
 #pragma once
 
@@ -76,9 +76,9 @@ boolean scaleCalibrationOn = 0;
 boolean scaleTareOn = 0;
 int shottimerCounter = 10;
 float calibrationValue = SCALE_CALIBRATION_FACTOR; // use calibration example to get value
-float weight = 0;                                  // value from HX711
-float weightPreBrew = 0;                           // value of scale before wrew started
-float weightBrew = 0;                              // weight value of brew
+float currWeight = 0;                              // value from HX711
+float weightPreBrew = 0;                           // value of scale before brew started
+float weightBrewed = 0;                            // weight value of brew
 float scaleDelayValue = 2.5;                       // value in gramm that takes still flows onto the scale after brew is stopped
 bool scaleFailure = false;
 const unsigned long intervalWeight = 200;          // weight scale
@@ -248,7 +248,7 @@ bool brew() {
                 }
 #if (FEATURE_SCALE == 1)
                 // stop brew if target-weight is reached --> No stop if stop by weight is deactivated via Parameter (0)
-                else if (((FEATURE_SCALE == 1) && (weightBrew > weightSetpoint)) && (weightSetpoint > 0)) {
+                else if (((FEATURE_SCALE == 1) && (weightBrewed > weightSetpoint)) && (weightSetpoint > 0)) {
                     LOG(INFO, "Brew reached weight target");
                     currBrewState = kBrewFinished;
                 }

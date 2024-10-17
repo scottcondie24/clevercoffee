@@ -13,7 +13,9 @@
 static const char* langstring_set_temp = "Soll:  ";
 static const char* langstring_current_temp = "Ist:   ";
 static const char* langstring_brew = "Bezug: ";
+static const char* langstring_weight = "Gewicht: ";
 static const char* langstring_manual_flush = "Spuelen: ";
+static const char* langstring_pressure = "Druck: ";
 static const char* langstring_uptime = "Uptime:  ";
 #endif
 #if (DISPLAYTEMPLATE >= 20) // vertical templates
@@ -39,7 +41,9 @@ static const char* langstring_backflush_finish = "um zu beenden...";
 static const char* langstring_set_temp = "Set:   ";
 static const char* langstring_current_temp = "Temp:  ";
 static const char* langstring_brew = "Brew: ";
+static const char* langstring_weight = "Weight: ";
 static const char* langstring_manual_flush = "Flush: ";
+static const char* langstring_pressure = "Pressure: ";
 static const char* langstring_uptime = "Uptime:  ";
 #endif
 #if (DISPLAYTEMPLATE >= 20) // vertical templates
@@ -66,7 +70,9 @@ static const char* langstring_backflush_finish = "to finish...";
 static const char* langstring_set_temp = "Obj:  ";
 static const char* langstring_current_temp = "T:    ";
 static const char* langstring_brew = "Brew: ";
+static const char* langstring_weight = "Peso: ";
 static const char* langstring_manual_flush = "Fregar: ";
+static const char* langstring_pressure = "Presión: ";
 static const char* langstring_uptime = "Uptime:  ";
 #endif
 #if (DISPLAYTEMPLATE >= 20) // vertical templates

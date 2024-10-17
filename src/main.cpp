@@ -47,6 +47,11 @@
 #include "defaults.h"
 #include "userConfig.h" // needs to be configured by the user
 
+// Version of userConfig need to match, checked by preprocessor
+#if (FW_VERSION != USR_FW_VERSION) || (FW_SUBVERSION != USR_FW_SUBVERSION) || (FW_HOTFIX != USR_FW_HOTFIX)
+#error Version of userConfig file and main.cpp need to match!
+#endif
+
 hw_timer_t* timer = NULL;
 
 #if (FEATURE_PRESSURESENSOR == 1)
@@ -66,11 +71,6 @@ hw_timer_t* timer = NULL;
 #define SCK_DELAY              1
 #define SCK_DISABLE_INTERRUPTS 0
 #include <HX711_ADC.h>
-#endif
-
-// Version of userConfig need to match, checked by preprocessor
-#if (FW_VERSION != USR_FW_VERSION) || (FW_SUBVERSION != USR_FW_SUBVERSION) || (FW_HOTFIX != USR_FW_HOTFIX)
-#error Version of userConfig file and main.cpp need to match!
 #endif
 
 MACHINE machine = (enum MACHINE)MACHINEID;
@@ -179,15 +179,12 @@ void updateStandbyTimer(void);
 void resetStandbyTimer(void);
 
 // system parameters
-uint8_t pidON = 0; // 1 = control loop in closed loop
+uint8_t pidON = 0;   // 1 = control loop in closed loop
+uint8_t usePonM = 0; // 1 = use PonM for cold start PID, 0 = use normal PID for cold start
 double brewSetpoint = SETPOINT;
 double brewTempOffset = TEMPOFFSET;
 double setpoint = brewSetpoint;
 double steamSetpoint = STEAMSETPOINT;
-float scaleCalibration = SCALE_CALIBRATION_FACTOR;
-float scale2Calibration = SCALE_CALIBRATION_FACTOR;
-float scaleKnownWeight = SCALE_KNOWN_WEIGHT;
-uint8_t usePonM = 0; // 1 = use PonM for cold start PID, 0 = use normal PID for cold start
 double steamKp = STEAMKP;
 double startKp = STARTKP;
 double startTn = STARTTN;
@@ -196,6 +193,10 @@ double aggTn = AGGTN;
 double aggTv = AGGTV;
 double aggIMax = AGGIMAX;
 
+// Scale
+float scaleCalibration = SCALE_CALIBRATION_FACTOR;
+float scale2Calibration = SCALE_CALIBRATION_FACTOR;
+float scaleKnownWeight = SCALE_KNOWN_WEIGHT;
 double weightSetpoint = SCALE_WEIGHTSETPOINT;
 
 // PID - values for offline brew detection
@@ -1167,7 +1168,7 @@ void setup() {
                                             .type = kDouble,
                                             .section = sBrewSection,
                                             .position = 21,
-                                            .show = [] { return true && FEATURE_SCALE == 1; },
+                                            .show = [] { return true && FEATURE_SCALE == 1 && featureBrewControl == 1; },
                                             .minValue = WEIGHTSETPOINT_MIN,
                                             .maxValue = WEIGHTSETPOINT_MAX,
                                             .ptr = (void*)&weightSetpoint};
@@ -1429,7 +1430,8 @@ void setup() {
     mqttVars["scaleTareOn"] = [] { return &editableVars.at("TARE_ON"); };
     mqttVars["scaleCalibrationOn"] = [] { return &editableVars.at("CALIBRATION_ON"); };
 
-    mqttSensors["currentWeight"] = [] { return weight; };
+    mqttSensors["currWeight"] = [] { return currWeight; };
+    mqttSensors["weightBrewed"] = [] { return weightBrewed; };
 #endif
 
 #if FEATURE_PRESSURESENSOR == 1
