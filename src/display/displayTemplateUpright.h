@@ -99,8 +99,6 @@ void printScreen() {
                 u8g2.print(" s");
             }
 
-            // Flush time
-
             // Shown flush time while machine is flushing
             if (machineState == kManualFlush) {
                 u8g2.setDrawColor(0);
@@ -113,9 +111,7 @@ void printScreen() {
             }
         }
         else {
-
             // Brew Timer with optocoupler
-
             // Shown brew time while machine is brewing and after the brewing during SHOTTIMERDISPLAYDELAY
             if (machineState == kBrew || (millis() - lastBrewTimeMillis) < SHOTTIMERDISPLAYDELAY) {
                 u8g2.setCursor(1, 34);

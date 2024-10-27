@@ -79,7 +79,8 @@ const vueApp = Vue.createApp({
                 3: 'Brew Control',
                 4: 'Scale Parameters',
                 5: 'Display Settings',
-                6: 'Power Settings'
+                6: 'Maintenance',
+                7: 'Power Settings'
             }
 
             return sectionNames[sectionId]
