@@ -1658,12 +1658,13 @@ void looppid() {
             LOGF(TRACE, "Current PID diff'd input: %f", bPID.GetDeltaInput());
             LOGF(TRACE, "Current PID D part: %f", bPID.GetLastDPart());
             LOGF(TRACE, "Current PID kD: %f", bPID.GetKd());
-
             // Combined PID output
             LOGF(TRACE, "Current PID Output: %f", pidOutput);
             LOGF(TRACE, "Current Machinestate: %s", machinestateEnumToString(machineState));
+            // Brew
             LOGF(TRACE, "timeBrewed %f", timeBrewed);
             LOGF(TRACE, "Brew detected %i", brew());
+            LOGF(TRACE, "brewPIDdisabled %i", brewPIDDisabled);
         }
     }
 
@@ -1768,6 +1769,13 @@ void looppid() {
                 setNormalPIDTunings();
             }
         }
+    }
+    // Reset brewPIDdisabled if brew was aborted
+    if (machineState != kBrew && brewPIDDisabled) {
+        // enable PID again
+        bPID.SetMode(AUTOMATIC);
+        brewPIDDisabled = false;
+        LOG(DEBUG, "Enabled PID again after brew was manually stopped");
     }
 
     // Steam on
