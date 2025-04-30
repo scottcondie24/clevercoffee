@@ -1794,7 +1794,11 @@ void looppid() {
     }
     
     //turn on pump if water switch is on, only turn off if not in a brew state
-    if (waterON == 1) {
+    if (machineState == kWaterEmpty) {
+        pumpRelay.off();
+        waterstatedebug = "off-we";
+    }
+    else if (waterON == 1 && machineState != kWaterEmpty) {
         pumpRelay.on();
         waterstatedebug = "on-sw";
     }
@@ -1809,6 +1813,7 @@ void looppid() {
             }
         }
     }
+
 
     
 
@@ -1830,7 +1835,6 @@ void looppid() {
 #if OLED_DISPLAY != 0
     printDisplayTimer();
 #endif
-
     if (machineState == kPidDisabled || machineState == kWaterEmpty || machineState == kSensorError || machineState == kEmergencyStop || machineState == kEepromError || machineState == kStandby ||
         machineState == kBackflush || brewPIDDisabled) {
         if (bPID.GetMode() == 1) {

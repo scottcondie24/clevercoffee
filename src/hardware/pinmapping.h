@@ -23,7 +23,7 @@
 
 // Sensors
 #define PIN_TEMPSENSOR  16
-#define PIN_WATERSENSOR 23
+#define PIN_WATERSENSOR 5   //23    - reusing the PIN_ROTARY_SW pin as the encoder isnt used in the code yet
 #define PIN_HXDAT       33 // Brew scale data pin 1
 #define PIN_HXDAT2      25 // Brew scale data pin 2
 #define PIN_HXCLK       32 // Brew scale clock pin
