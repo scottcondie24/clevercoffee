@@ -4,7 +4,6 @@
  * @brief Handler for digital hot water switch
  */
 
-#include <hardware/pinmapping.h>
 uint8_t currStateWaterSwitch;
 
 void checkWaterSwitch() {
