@@ -570,7 +570,7 @@ int sendHASSIODiscoveryMsg() {
     discoveryObjects.push_back(weightSetpoint);
 #endif
 
-#if FEATURE_PRESSURESENSOR == 1
+#if (FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)
 
     DiscoveryObject pressure = GenerateSensorDevice("pressure", "Pressure", "bar", "pressure");
 

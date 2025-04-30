@@ -136,7 +136,7 @@ void printScreen() {
         u8g2.print(" g");
     }
 
-#if (FEATURE_PRESSURESENSOR == 1)
+#if (FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)
     u8g2.setCursor(32, 46);
     u8g2.print(langstring_pressure);
     u8g2.print(inputPressure, 1);

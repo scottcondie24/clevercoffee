@@ -64,6 +64,11 @@ hw_timer_t* timer = NULL;
 #include <Wire.h>
 #endif
 
+#if (FEATURE_PRESSURESENSOR == 2)
+#include "hardware/pressureSensorAds1115.h"
+#include <Wire.h>
+#endif
+
 #if OLED_DISPLAY == 3
 #include <SPI.h>
 #endif
@@ -134,7 +139,7 @@ unsigned int wifiReconnects = 0; // actual number of reconnects
 const char* OTApass = OTAPASS;
 
 // Pressure sensor
-#if (FEATURE_PRESSURESENSOR == 1)
+#if (FEATURE_PRESSURESENSOR == 1)||(FEATURE_PRESSURESENSOR == 2)
 float inputPressure = 0;
 float inputPressureFilter = 0;
 const unsigned long intervalPressure = 100;
@@ -1519,7 +1524,7 @@ void setup() {
     mqttSensors["weightBrewed"] = [] { return weightBrewed; };
 #endif
 
-#if FEATURE_PRESSURESENSOR == 1
+#if (FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)
     mqttSensors["pressure"] = [] { return inputPressureFilter; };
 #endif
     initTimer1();
@@ -1663,7 +1668,7 @@ void setup() {
     previousMillisScale = currentTime;
 #endif
 
-#if (FEATURE_PRESSURESENSOR == 1)
+#if (FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)
     previousMillisPressure = currentTime;
 #endif
 
@@ -1778,7 +1783,7 @@ void looppid() {
     manualFlush();
 #endif
 
-#if (FEATURE_PRESSURESENSOR == 1)
+#if (FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)
     unsigned long currentMillisPressure = millis();
 
     if (currentMillisPressure - previousMillisPressure >= intervalPressure) {
