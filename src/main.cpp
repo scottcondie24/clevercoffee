@@ -705,6 +705,14 @@ void handleMachineState() {
                 machineState = kPidNormal;
             }
 
+            if (steamON == 1) {
+                machineState = kSteam;
+
+                if (standbyModeOn) {
+                    resetStandbyTimer();
+                }
+            }
+
             if (emergencyStop) {
                 machineState = kEmergencyStop;
             }
@@ -1792,18 +1800,21 @@ void looppid() {
     else if (steamON == 0) {
         setpoint = brewSetpoint;
     }
-    
-    //turn on pump if water switch is on, only turn off if not in a brew state
+
+    updateStandbyTimer();
+    handleMachineState();
+
+    //turn on pump if water switch is on, only turn off if not in a brew or flush state
     if (machineState == kWaterEmpty) {
         pumpRelay.off();
         waterstatedebug = "off-we";
     }
-    else if (waterON == 1 && machineState != kWaterEmpty) {
+    else if (machineState == kWater || (machineState == kSteam && waterON == 1)) { //was waterON == 1 && machineState != kWaterEmpty not needed now kWaterEmpty check is first
         pumpRelay.on();
         waterstatedebug = "on-sw";
     }
-    else if (waterON == 0) {    //currently need currBrewSwitchState as machineState doesnt change quick enough and turns the pump off when flushing
-        if(machineState != kBrew && machineState != kBackflush && machineState != kManualFlush && currBrewSwitchState != kBrewSwitchLongPressed && currBrewSwitchState != kBrewSwitchShortPressed) {
+    else {    // was (waterON == 0) but not needed, currently need currBrewSwitchState as machineState doesnt change quick enough and turns the pump off when flushing
+        if(machineState != kBrew && machineState != kBackflush && machineState != kManualFlush) { //} && currBrewSwitchState != kBrewSwitchLongPressed && currBrewSwitchState != kBrewSwitchShortPressed) {
             pumpRelay.off();
             waterstatedebug = "off-sw";
         }
@@ -1814,17 +1825,11 @@ void looppid() {
         }
     }
 
-
-    
-
     if(machineState != lastmachinestatedebug || waterstatedebug != lastwaterstatedebug) {
         LOGF(DEBUG, "main.cpp - water state: %s, machineState=%s", waterstatedebug, machinestateEnumToString(machineState));
         lastmachinestatedebug = machineState;
         lastwaterstatedebug = waterstatedebug;
     }
-
-    updateStandbyTimer();
-    handleMachineState();
 
     // Check if brew timer should be shown
 #if (FEATURE_BREWSWITCH == 1)
