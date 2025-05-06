@@ -46,6 +46,29 @@ void scaleCalibrate(HX711_ADC loadCell, int pin, sto_item_id_t name, float* cali
 
 float w1 = 0.0;
 float w2 = 0.0;
+float inA = 0, inB = 0, inOldW1 = 0,inOldW2 = 0, inSumW1 = 0, inSumW2 = 0; // used for filterWeightValue()
+
+/**
+ * @brief Filter input value using exponential moving average filter (using fixed coefficients)
+ *      After ~28 cycles the input is set to 99,66% if the real input value sum of inX and inY
+ *      multiplier must be 1 increase inX multiplier to make the filter faster
+ */
+float filterWeight1Value(float inputW) {
+    inA = inputW * 0.9;
+    inB = inOldW1 * 0.1;
+    inSumW1 = inA + inB;
+    inOldW1 = inSumW1;
+
+    return inSumW1;
+}
+float filterWeight2Value(float inputW) {
+    inA = inputW * 0.9;
+    inB = inOldW2 * 0.1;
+    inSumW2 = inA + inB;
+    inOldW2 = inSumW2;
+
+    return inSumW2;
+}
 
 /**
  * @brief Check measured weight
@@ -59,10 +82,15 @@ void checkWeight() {
     }
 
     // check for new data/start next conversion:
-    if (LoadCell.update()) newDataReady = true;
-#if SCALE_TYPE == 0
+  
+/*#if SCALE_TYPE == 0
     // weirdly, the library examples do not check for updates on the second cell before getting the values...
+    if (LoadCell.update()) {
+        newDataReady = true;
+    }
     LoadCell2.update();
+#else
+    if (LoadCell.update()) newDataReady = true;
 #endif
 
     if (newDataReady) {
@@ -76,11 +104,24 @@ void checkWeight() {
 #endif
         }
     }
+        */
 
+    if (LoadCell.update()) {
+        //w1 = filterWeight1Value(LoadCell.getData());
+        w1 = LoadCell.getData();
+    }
 #if SCALE_TYPE == 0
+    if (LoadCell2.update()) {
+        //w2 = filterWeight2Value(LoadCell2.getData());
+        w2 = LoadCell2.getData();
+    }
+#endif
+#if SCALE_TYPE == 0
+    //currWeight = (int)(w1*2) + ((w2*2)/1000);
     currWeight = w1 + w2;
 #else
     currWeight = w1;
+
 #endif
 
     if (scaleCalibrationOn) {
