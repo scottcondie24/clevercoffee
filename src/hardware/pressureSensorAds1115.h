@@ -9,19 +9,18 @@
 #include "Logger.h"
 #include "userConfig.h"
 #include <Arduino.h>
-#include <Wire.h>
-#include <Adafruit_ADS1X15.h>
+#include <ADS1115.h>
 
-Adafruit_ADS1115 ads1115;
+using namespace ADS1115;
+ADS1115_ADC adc(I2CAddress::Gnd);
 
 const unsigned long intervalPressureDebug = 1000;
 unsigned long previousMillisPressureDebug = 0;
 
-uint8_t ADS_id = 0x48;                    // i2c address
+//uint8_t ADS_id = 0x48;                    // i2c address
 double analog_pressure = 0.0;             // pressure reading in bar
-#define CONVERSION_FACTOR_MV 0.188        // 188uV/bit for ads1115
-#define CONVERSION_FACTOR_P 0.003         // sensor is 12 Bar over 4000mV
-#define RANGEOFFSET 500                   // minimum reading is 500mV
+#define CONVERSION_FACTOR_P 3               // sensor is 12 Bar over 4V
+#define RANGEOFFSET 0.500                  // minimum reading is 500mV
 
 /*uint8_t ABP2_data[7];                     // holds output data
 uint8_t ABP2_cmd[3] = {0xAA, 0x00, 0x00}; // command to be sent
@@ -36,12 +35,33 @@ double ABP2_pmin = 0.0;                   // minimum value of pressure range [ba
 double ABP2_percentage = 0.0;             // holds percentage of full scale data
 */
 
-float measurePressure() {
-    int16_t adc0 = 0;
-    double measured_voltage = 0.0;
-    ads1115.begin(ADS_id);
-    adc0 = ads1115.readADC_SingleEnded(0);
+void pressureInit() {
+    adc.setMux(Mux::P0_GND);
+    adc.setPga(Pga::FSR_6_144V);
+    adc.setDataRate(DataRate::SPS_128);
 
+    Status status = adc.uploadConfig();
+
+    if (status != Status::Ok) {
+        //handle the error
+    }
+
+    status = adc.startContinuousConversion(0);
+
+    if (status != Status::Ok) {
+        //handle the error
+    }
+}
+
+float measurePressure() {
+    float voltage;
+    //double measured_voltage = 0.0;
+    
+    Status status = adc.readConversionVoltage(voltage);
+    
+    if (status != Status::Ok) {
+        //handle the error
+    }
     /*Wire.beginTransmission(ABP2_id);
     int stat = Wire.write(ABP2_cmd, 3); // write command to the sensor
     stat |= Wire.endTransmission();
@@ -69,15 +89,13 @@ float measurePressure() {
     // calculation of pressure value according to equation 2 of datasheet
     ABP2_pressure = ((ABP2_press_counts - ABP2_outputmin) * (ABP2_pmax - ABP2_pmin)) / (ABP2_outputmax - ABP2_outputmin) + ABP2_pmin;
     */
-
-    measured_voltage = (adc0*CONVERSION_FACTOR_MV) - RANGEOFFSET;
-    analog_pressure = measured_voltage*CONVERSION_FACTOR_P;
+    analog_pressure = (voltage-RANGEOFFSET)*CONVERSION_FACTOR_P;
 
     IFLOG(TRACE) {
         unsigned long currentMillisPressureDebug = millis();
 
         if (currentMillisPressureDebug - previousMillisPressureDebug >= intervalPressureDebug) {
-            LOGF(TRACE, "Raw: %f, Pressure: %f", adc0, analog_pressure);
+            LOGF(TRACE, "Voltage: %f, Pressure: %f", voltage, analog_pressure);
             previousMillisPressureDebug = currentMillisPressureDebug;
         }
     }
