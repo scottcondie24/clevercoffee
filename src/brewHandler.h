@@ -79,12 +79,12 @@ float weightPreBrew = 0;                           // value of scale before brew
 float weightBrewed = 0;                            // weight value of brew
 float scaleDelayValue = 2.5;                       // value in gramm that takes still flows onto the scale after brew is stopped
 bool scaleFailure = false;
-const unsigned long intervalWeight = 200;          // weight scale
+const unsigned long intervalWeight = 120;          // weight scale
 unsigned long previousMillisScale;                 // initialisation at the end of init()
-HX711_ADC LoadCell(PIN_HXDAT, PIN_HXCLK);
+HX711_ADC LoadCell(PIN_HXDAT, PIN_HXCLK1);
 
 #if SCALE_TYPE == 0
-HX711_ADC LoadCell2(PIN_HXDAT2, PIN_HXCLK);
+HX711_ADC LoadCell2(PIN_HXDAT2, PIN_HXCLK2);
 #endif
 #endif
 
