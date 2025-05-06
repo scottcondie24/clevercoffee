@@ -93,7 +93,7 @@ void printScreen() {
             u8g2.setCursor(32, 26);
             u8g2.print(langstring_weight);
             u8g2.setCursor(82, 26);
-            u8g2.print(weightBrewed, 0);
+            u8g2.print(weightBrewed, 1);
 
             if (weightSetpoint > 0) {
                 u8g2.print("/");
@@ -120,7 +120,7 @@ void printScreen() {
             u8g2.setCursor(32, 26);
             u8g2.print(langstring_weight);
             u8g2.setCursor(82, 26);
-            u8g2.print(weightBrewed, 0);
+            u8g2.print(weightBrewed, 1);
             u8g2.print(" g");
             // time
             u8g2.setCursor(32, 36);
@@ -139,7 +139,7 @@ void printScreen() {
 #if (FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)
     u8g2.setCursor(32, 46);
     u8g2.print(langstring_pressure);
-    u8g2.print(inputPressure, 1);
+    u8g2.print(inputPressure, 3);
 #endif
 
     // Show heater output in %
