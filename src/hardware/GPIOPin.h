@@ -59,6 +59,10 @@ class GPIOPin {
          */
         Type getType() const;
 
+
+        int getPinNumber() const { return pin; }
+        
+
     private:
         /**
          * @brief Set the type of the GPIO pin
@@ -66,7 +70,7 @@ class GPIOPin {
          * @param pinType Desired type of the pin
          */
         void setType(Type pinType);
-
+        
         int pin;
         Type pinType;
 };
