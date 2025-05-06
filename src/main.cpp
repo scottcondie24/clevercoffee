@@ -23,6 +23,7 @@
 #include <U8g2lib.h> // i2c display
 #include <WiFiManager.h>
 #include <os.h>
+#include <ESP32RotaryEncoder.h>
 
 // Includes
 #include "display/bitmaps.h" // user icons for display
@@ -43,6 +44,7 @@
 #include "hardware/TempSensorTSIC.h"
 #include "hardware/TempSensorK.h"
 #include "hardware/pinmapping.h"
+#include "hardware/Dimmer.h"
 
 // User configuration & defaults
 #include "defaults.h"
@@ -139,10 +141,16 @@ unsigned int wifiReconnects = 0; // actual number of reconnects
 const char* OTApass = OTAPASS;
 
 // Pressure sensor
-#if (FEATURE_PRESSURESENSOR == 1)||(FEATURE_PRESSURESENSOR == 2)
+#if (FEATURE_PRESSURESENSOR == 1)
 float inputPressure = 0;
 float inputPressureFilter = 0;
 const unsigned long intervalPressure = 100;
+unsigned long previousMillisPressure; // initialisation at the end of init()
+#endif
+#if (FEATURE_PRESSURESENSOR == 2)
+float inputPressure = 0;
+float inputPressureFilter = 0;
+const unsigned long intervalPressure = 20;
 unsigned long previousMillisPressure; // initialisation at the end of init()
 #endif
 
@@ -162,7 +170,10 @@ GPIOPin heaterRelayPin(PIN_HEATER, GPIOPin::OUT);
 Relay heaterRelay(heaterRelayPin, HEATER_SSR_TYPE);
 
 GPIOPin pumpRelayPin(PIN_PUMP, GPIOPin::OUT);
+GPIOPin pumpZCPin(PIN_ZC, GPIOPin::IN_HARDWARE);
 Relay pumpRelay(pumpRelayPin, PUMP_WATER_SSR_TYPE);
+//Dimmer pumpRelay(pumpRelayPin, pumpZCPin);
+
 
 GPIOPin valveRelayPin(PIN_VALVE, GPIOPin::OUT);
 Relay valveRelay(valveRelayPin, PUMP_VALVE_SSR_TYPE);
@@ -173,6 +184,8 @@ Switch* steamSwitch;
 Switch* waterSwitch;
 
 TempSensor* tempSensor;
+
+RotaryEncoder rotaryEncoder(PIN_ROTARY_CLK, PIN_ROTARY_DT);     //SW interrupt crashes at the moment 05/05/2025
 
 #include "isr.h"
 
@@ -198,6 +211,8 @@ float filterPressureValue(float input);
 int writeSysParamsToMQTT(bool continueOnError);
 void updateStandbyTimer(void);
 void resetStandbyTimer(void);
+void knobCallback(long);
+void buttonCallback(unsigned long);
 
 // system parameters
 uint8_t pidON = 0;   // 1 = control loop in closed loop
@@ -225,6 +240,13 @@ uint8_t useBDPID = 0;
 double aggbKp = AGGBKP;
 double aggbTn = AGGBTN;
 double aggbTv = AGGBTV;
+
+//Debugging timing
+unsigned long previousMicrosDebug = 0;
+unsigned long currentMicrosDebug = 0;
+unsigned long intervalDebug = 1000000;
+
+int DimmerPower = 0;
 
 #if aggbTn == 0
 double aggbKi = 0;
@@ -1468,6 +1490,10 @@ void setup() {
 #if (FEATURE_PRESSURESENSOR == 1)
     Wire.begin();
 #endif
+#if (FEATURE_PRESSURESENSOR == 2)
+    Wire.begin();
+    pressureInit();
+#endif
 
     // Editable values reported to MQTT
     mqttVars["pidON"] = [] { return &editableVars.at("PID_ON"); };
@@ -1530,6 +1556,7 @@ void setup() {
     initTimer1();
 
     storageSetup();
+    //pumpRelay.begin();
 
     heaterRelay.off();
     valveRelay.off();
@@ -1556,11 +1583,17 @@ void setup() {
         brewLedPin = new GPIOPin(PIN_BREWLED, GPIOPin::OUT);
         steamLedPin = new GPIOPin(PIN_STEAMLED, GPIOPin::OUT);
         waterLedPin = new GPIOPin(PIN_WATERLED, GPIOPin::OUT);
+        //GPIOPin waterLedPin(PIN_WATERLED, GPIOPin::OUT);
+        //Dimmer waterLed(waterLedPin, pumpZCPin);
 
         statusLed = new StandardLED(*statusLedPin);
         brewLed = new StandardLED(*brewLedPin);
         steamLed = new StandardLED(*steamLedPin);
         waterLed = new StandardLED(*waterLedPin);
+
+
+        //waterLed.begin();
+
         if (FEATURE_BREW_LED == 1) {
             brewLed->turnOff();
         }
@@ -1584,8 +1617,8 @@ void setup() {
         // TODO Addressable LEDs
     }
 
-    if (FEATURE_WATER_SENS == 1) {
-        waterSensor = new IOSwitch(PIN_WATERSENSOR, (WATER_SENS_TYPE == Switch::NORMALLY_OPEN ? GPIOPin::IN_PULLDOWN : GPIOPin::IN_PULLUP), Switch::TOGGLE, WATER_SENS_TYPE);
+    if (FEATURE_WATERTANKSENSOR == 1) {
+        waterSensor = new IOSwitch(PIN_WATERSENSOR, (WATERTANKSENSOR_TYPE == Switch::NORMALLY_OPEN ? GPIOPin::IN_PULLDOWN : GPIOPin::IN_PULLUP), Switch::TOGGLE, WATERTANKSENSOR_TYPE);
     }
 
 #if OLED_DISPLAY != 0
@@ -1672,6 +1705,12 @@ void setup() {
     previousMillisPressure = currentTime;
 #endif
 
+    rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
+    rotaryEncoder.setBoundaries(0,20,false);
+    rotaryEncoder.onTurned( &knobCallback );
+    rotaryEncoder.onPressed( &buttonCallback );
+    rotaryEncoder.begin();
+
     setupDone = true;
 
     enableTimer1();
@@ -1680,7 +1719,17 @@ void setup() {
     LOGF(INFO, "LittleFS: %d%% (used %ld bytes from %ld bytes)", (int)ceil(fsUsage), LittleFS.usedBytes(), LittleFS.totalBytes());
 }
 
+void knobCallback(long value){
+    LOGF(INFO, "Rotary Encoder Value: %i", value);
+    DimmerPower = value*5;
+}
+void buttonCallback(unsigned long duration){
+    LOGF(INFO, "Rotary Encoder Button down for: %u ms", duration);
+}
+
 void loop() {
+    unsigned long m1, m2;
+    currentMicrosDebug = micros();
     // Accept potential connections for remote logging
     Logger::update();
 
@@ -1692,6 +1741,20 @@ void loop() {
 
     // Update LED output based on machine state
     loopLED();
+
+    m1 = micros() - currentMicrosDebug;
+    if (m1 >= m2) {
+        m2 = m1;
+    }
+
+    IFLOG(DEBUG) {
+        if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
+            previousMicrosDebug = currentMicrosDebug;
+            LOGF(DEBUG, "max loop micros: %llu", m2);
+            m2 = 0;
+        }
+    }
+    //pumpRelay.setPower(DimmerPower);
 }
 
 void looppid() {
@@ -1987,7 +2050,7 @@ void loopLED() {
 }
 
 void checkWater() {
-    if (FEATURE_WATER_SENS != 1) {
+    if (FEATURE_WATERTANKSENSOR != 1) {
         return;
     }
 
