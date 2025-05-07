@@ -247,6 +247,15 @@ unsigned long intervalDebug = 1000000;
 
 //Dimmer
 int DimmerPower = 95;
+float setPressure = 9.0;
+unsigned long currentMillisPressureControl = 0;
+unsigned long previousMillisPressureControl = 0;
+unsigned long pressureControlInterval = 50;
+// --- PI control variables ---
+static float pressureintegral = 0.0;
+const float pressureKp = 20.0;    // Proportional gain
+const float pressureKi = 3.0;     // Integral gain
+const float pressuredt = pressureControlInterval / 1000.0;  // Time step in seconds
 
 #if aggbTn == 0
 double aggbKi = 0;
@@ -1703,7 +1712,7 @@ void setup() {
 #endif
 
     rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-    rotaryEncoder.setBoundaries(0,19,false);
+    rotaryEncoder.setBoundaries(20,50,false);
     rotaryEncoder.onTurned( &knobCallback );
     rotaryEncoder.onPressed( &buttonCallback );
     rotaryEncoder.begin();
@@ -1718,7 +1727,8 @@ void setup() {
 
 void knobCallback(long value){
     LOGF(INFO, "Rotary Encoder Value: %i", value);
-    DimmerPower = value*5;
+    //DimmerPower = value*2;
+    setPressure = value/5.0;
 }
 void buttonCallback(unsigned long duration){
     LOGF(INFO, "Rotary Encoder Button down for: %u ms", duration);
@@ -1752,8 +1762,30 @@ void loop() {
         }
     }
 
-    if(pumpRelay.getPower() != DimmerPower) {
-        pumpRelay.setPower(DimmerPower);
+    //if(pumpRelay.getPower() != DimmerPower) {
+    //    pumpRelay.setPower(DimmerPower);
+    //}
+    if(pumpRelay.getState()) {
+        currentMillisPressureControl = millis();
+        if (currentMillisPressureControl - previousMillisPressureControl >= pressureControlInterval) {
+            previousMillisPressureControl = currentMillisPressureControl;
+        
+            float error = (setPressure) - inputPressure;
+        
+            // Integrate error
+            pressureintegral += error * pressuredt;
+        
+            // PI output
+            float output = (pressureKp * error) + (pressureKi * pressureintegral);
+        
+            // Convert to int and clamp to 0–95
+            DimmerPower = constrain((int)output, 0, 95);
+        
+            // Only update if power changed
+            if (pumpRelay.getPower() != DimmerPower) {
+                pumpRelay.setPower(DimmerPower);
+            }
+        }
     }
 }
 
