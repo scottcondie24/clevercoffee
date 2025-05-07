@@ -14,6 +14,8 @@
 
 unsigned long previousMillisMQTT;
 const unsigned long intervalMQTT = 5000;
+const unsigned long intervalMQTTbrew = 250;
+const unsigned long intervalMQTTstandby = 10000;
 
 WiFiClient net;
 PubSubClient mqtt(net);
@@ -226,7 +228,7 @@ void mqtt_callback(char* topic, byte* data, unsigned int length) {
 int writeSysParamsToMQTT(bool continueOnError = true) {
     unsigned long currentMillisMQTT = millis();
 
-    if ((currentMillisMQTT - previousMillisMQTT >= intervalMQTT) && FEATURE_MQTT == 1) {
+    if (((currentMillisMQTT - previousMillisMQTT >= intervalMQTT) || ((currentMillisMQTT - previousMillisMQTT >= intervalMQTTbrew) && machineState == kBrew ) || ((currentMillisMQTT - previousMillisMQTT >= intervalMQTTstandby) && machineState == kStandby)) && FEATURE_MQTT == 1) {
         previousMillisMQTT = currentMillisMQTT;
 
         if (mqtt.connected()) {

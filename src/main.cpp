@@ -244,6 +244,8 @@ double aggbTv = AGGBTV;
 unsigned long previousMicrosDebug = 0;
 unsigned long currentMicrosDebug = 0;
 unsigned long intervalDebug = 1000000;
+unsigned long m1 = 0;
+unsigned long m2 = 0;
 
 //Dimmer
 int DimmerPower = 95;
@@ -1739,7 +1741,6 @@ void buttonCallback(unsigned long duration){
 }
 
 void loop() {
-    unsigned long m1, m2;
     currentMicrosDebug = micros();
     // Accept potential connections for remote logging
     Logger::update();
@@ -1754,7 +1755,7 @@ void loop() {
     loopLED();
 
     m1 = micros() - currentMicrosDebug;
-    if (m1 >= m2) {
+    if ((m1 >= m2)&&(m1<100000)) {
         m2 = m1;
     }
 
