@@ -253,8 +253,10 @@ unsigned long previousMillisPressureControl = 0;
 unsigned long pressureControlInterval = 50;
 // --- PI control variables ---
 static float pressureintegral = 0.0;
-const float pressureKp = 20.0;    // Proportional gain
-const float pressureKi = 3.0;     // Integral gain
+const float pressureKp = 20.0;//25.0;//30.0;    // Proportional gain
+const float pressureKi = 10.0;//45.0;//75.0;     // Integral gain
+const float pressureKd = 2.0;//3.0;       // Derivative gain
+float previousError = 0;
 const float pressuredt = pressureControlInterval / 1000.0;  // Time step in seconds
 
 #if aggbTn == 0
@@ -580,8 +582,8 @@ char* number2string(unsigned int in) {
  *      multiplier must be 1 increase inX multiplier to make the filter faster
  */
 float filterPressureValue(float input) {
-    inX = input * 0.3;
-    inY = inOld * 0.7;
+    inX = input * 0.2;//0.3;
+    inY = inOld * 0.8;//0.7;
     inSum = inX + inY;
     inOld = inSum;
 
@@ -1713,6 +1715,7 @@ void setup() {
 
     rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
     rotaryEncoder.setBoundaries(20,50,false);
+    //rotaryEncoder.setBoundaries(1,80,false);
     rotaryEncoder.onTurned( &knobCallback );
     rotaryEncoder.onPressed( &buttonCallback );
     rotaryEncoder.begin();
@@ -1729,6 +1732,7 @@ void knobCallback(long value){
     LOGF(INFO, "Rotary Encoder Value: %i", value);
     //DimmerPower = value*2;
     setPressure = value/5.0;
+    //pressureKp = value*1.0;
 }
 void buttonCallback(unsigned long duration){
     LOGF(INFO, "Rotary Encoder Button down for: %u ms", duration);
@@ -1770,13 +1774,22 @@ void loop() {
         if (currentMillisPressureControl - previousMillisPressureControl >= pressureControlInterval) {
             previousMillisPressureControl = currentMillisPressureControl;
         
-            float error = (setPressure) - inputPressure;
-        
+            //float error = (setPressure) - inputPressure;
+            float error = (setPressure) - inputPressureFilter;
+
             // Integrate error
             pressureintegral += error * pressuredt;
-        
+            
+            pressureintegral = constrain(pressureintegral, -20.0, 20.0);
+
             // PI output
-            float output = (pressureKp * error) + (pressureKi * pressureintegral);
+            //float output = (pressureKp * error) + (pressureKi * pressureintegral);
+
+            //PID output
+            float pressurederivative = (error - previousError) / pressuredt;
+            previousError = error;
+        
+            float output = (pressureKp * error) + (pressureKi * pressureintegral) + (pressureKd * pressurederivative);
         
             // Convert to int and clamp to 0–95
             DimmerPower = constrain((int)output, 0, 95);
