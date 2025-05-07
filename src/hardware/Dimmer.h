@@ -9,6 +9,7 @@ public:
     void begin();
     void setPower(int power);     // 0–100
     int getPower() const;
+    bool getState() const;
     void off();
     void on();
 
@@ -17,4 +18,5 @@ private:
     GPIOPin& zc;
     dimmerLamp dimmer;
     int currentPower;
+    bool currentState;
 };

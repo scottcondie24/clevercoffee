@@ -19,13 +19,19 @@ int Dimmer::getPower() const {
     return currentPower;
 }
 
+bool Dimmer::getState() const {
+    return currentState;
+}
+
 void Dimmer::off() {
     //currentPower = 0;
     //dimmer.setPower(0);
     dimmer.setState(OFF);
+    currentState = LOW;
 }
 
 void Dimmer::on() {
     //dimmer.setPower(currentPower);
     dimmer.setState(ON);
+    currentState = HIGH;
 }
