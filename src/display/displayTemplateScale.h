@@ -139,10 +139,12 @@ void printScreen() {
 #if (FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)
     u8g2.setCursor(32, 46);
     //u8g2.print(langstring_pressure);
-    u8g2.print("P: ");
+    u8g2.print("P:");
     u8g2.print(inputPressure, 2);
     u8g2.print(" ");
-    u8g2.print(DimmerPower);
+    u8g2.print(DimmerPower,0);
+    u8g2.print(" ");
+    u8g2.print(setPressure,1);
 #endif
 
     // Show heater output in %

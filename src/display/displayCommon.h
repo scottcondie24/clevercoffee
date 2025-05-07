@@ -294,13 +294,13 @@ bool displayFullscreenBrewTimer() {
         u8g2.print("g");
         u8g2.setFont(u8g2_font_profont11_tf);
         //add extra weight added to the cup after the brew has stopped
-        u8g2.setCursor(54, 48);
+        u8g2.setCursor(44, 48);
         u8g2.print(currWeight - weightPreBrew, 1);
         u8g2.print("g ");
         if ((FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)) {
             u8g2.print(inputPressure, 1);
             u8g2.print(" ");
-            u8g2.print(DimmerPower);
+            u8g2.print(setPressure,1);
         }
 
 #else
