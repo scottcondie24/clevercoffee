@@ -299,7 +299,8 @@ bool displayFullscreenBrewTimer() {
         u8g2.print("g ");
         if ((FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)) {
             u8g2.print(inputPressure, 1);
-            u8g2.print("bar");
+            u8g2.print(" ");
+            u8g2.print(DimmerPower);
         }
 
 #else

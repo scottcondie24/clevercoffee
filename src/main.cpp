@@ -158,24 +158,21 @@ Switch* waterSensor;
 
 GPIOPin* statusLedPin;
 GPIOPin* brewLedPin;
-//GPIOPin* waterLedPin;
+GPIOPin* waterLedPin;
 GPIOPin* steamLedPin;
 
 LED* statusLed;
 LED* brewLed;
-//LED* waterLed;
+LED* waterLed;
 LED* steamLed;
-
-Dimmer* dimmer = nullptr;
-
 
 GPIOPin heaterRelayPin(PIN_HEATER, GPIOPin::OUT);
 Relay heaterRelay(heaterRelayPin, HEATER_SSR_TYPE);
 
 GPIOPin pumpRelayPin(PIN_PUMP, GPIOPin::OUT);
 GPIOPin pumpZCPin(PIN_ZC, GPIOPin::IN_HARDWARE);
-GPIOPin dimmerPin(PIN_DIMMER, GPIOPin::OUT);
-Relay pumpRelay(pumpRelayPin, PUMP_WATER_SSR_TYPE);
+//Relay pumpRelay(pumpRelayPin, PUMP_WATER_SSR_TYPE);
+Dimmer pumpRelay(pumpRelayPin, pumpZCPin);
 
 GPIOPin valveRelayPin(PIN_VALVE, GPIOPin::OUT);
 Relay valveRelay(valveRelayPin, PUMP_VALVE_SSR_TYPE);
@@ -249,7 +246,7 @@ unsigned long currentMicrosDebug = 0;
 unsigned long intervalDebug = 1000000;
 
 //Dimmer
-int DimmerPower = 0;
+int DimmerPower = 100;
 
 #if aggbTn == 0
 double aggbKi = 0;
@@ -1560,11 +1557,8 @@ void setup() {
 
     storageSetup();
 
-    //dimmer = new Dimmer(pumpRelayPin, pumpZCPin);
-    dimmer = new Dimmer(dimmerPin, pumpZCPin);
-    dimmer->begin();
-    dimmer->setPower(0);
-    dimmer->on();
+    pumpRelay.begin();
+    pumpRelay.setPower(DimmerPower);
 
     heaterRelay.off();
     valveRelay.off();
@@ -1590,12 +1584,12 @@ void setup() {
         statusLedPin = new GPIOPin(PIN_STATUSLED, GPIOPin::OUT);
         brewLedPin = new GPIOPin(PIN_BREWLED, GPIOPin::OUT);
         steamLedPin = new GPIOPin(PIN_STEAMLED, GPIOPin::OUT);
-        //waterLedPin = new GPIOPin(PIN_WATERLED, GPIOPin::OUT);
+        waterLedPin = new GPIOPin(PIN_WATERLED, GPIOPin::OUT);
 
         statusLed = new StandardLED(*statusLedPin);
         brewLed = new StandardLED(*brewLedPin);
         steamLed = new StandardLED(*steamLedPin);
-        //waterLed = new StandardLED(*waterLedPin);
+        waterLed = new StandardLED(*waterLedPin);
 
         if (FEATURE_BREW_LED == 1) {
             brewLed->turnOff();
@@ -1609,12 +1603,12 @@ void setup() {
         else if (FEATURE_STEAM_LED == 2) {
             steamLed->turnOffInv();
         }
-        /*if (FEATURE_WATER_LED == 1) {
+        if (FEATURE_WATER_LED == 1) {
             waterLed->turnOff();
         }
         else if (FEATURE_WATER_LED == 2) {
             waterLed->turnOffInv();
-        }*/
+        }
     }
     else {
         // TODO Addressable LEDs
@@ -1758,10 +1752,8 @@ void loop() {
         }
     }
 
-    if (dimmer) {
-        if(dimmer->getPower() != DimmerPower) {
-            dimmer->setPower(DimmerPower);
-        }
+    if(pumpRelay.getPower() != DimmerPower) {
+        pumpRelay.setPower(DimmerPower);
     }
 }
 
@@ -2039,7 +2031,7 @@ void loopLED() {
             steamLed->turnOffInv();
         }
     }
-    /*if (FEATURE_WATER_LED == 1) {
+    if (FEATURE_WATER_LED == 1) {
         if (machineState == kWater) {
             waterLed->turnOn();
         }
@@ -2054,7 +2046,7 @@ void loopLED() {
         else {
             waterLed->turnOffInv();
         }
-    }*/
+    }
 }
 
 void checkWater() {
