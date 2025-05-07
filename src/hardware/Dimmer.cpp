@@ -9,7 +9,7 @@ void Dimmer::begin() {
 }
 
 void Dimmer::setPower(int power) {
-    power = constrain(power, 0, 100);
+    power = constrain(power, 0, 95);    //95% power prevents irregular operation due to timing jitter, zero-crossing signal delay, or TRIAC hold current, the TRIAC might misfire or not fully latch
     currentPower = power;
     dimmer.setPower(power);
     //dimmer.setState(ON);

@@ -246,7 +246,7 @@ unsigned long currentMicrosDebug = 0;
 unsigned long intervalDebug = 1000000;
 
 //Dimmer
-int DimmerPower = 100;
+int DimmerPower = 95;
 
 #if aggbTn == 0
 double aggbKi = 0;
@@ -1703,7 +1703,7 @@ void setup() {
 #endif
 
     rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-    rotaryEncoder.setBoundaries(0,20,false);
+    rotaryEncoder.setBoundaries(0,19,false);
     rotaryEncoder.onTurned( &knobCallback );
     rotaryEncoder.onPressed( &buttonCallback );
     rotaryEncoder.begin();
