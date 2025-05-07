@@ -1787,6 +1787,9 @@ void loop() {
             }
         }
     }
+    else {
+        pressureintegral = 0;
+    }
 }
 
 void looppid() {
