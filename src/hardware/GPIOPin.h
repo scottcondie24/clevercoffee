@@ -60,7 +60,7 @@ class GPIOPin {
         Type getType() const;
 
 
-        int getPinNumber() const { return pin; }
+        int getPin() const { return pin; }
         
 
     private:

@@ -43,6 +43,8 @@
 #define PIN_PUMP   27
 #define PIN_HEATER 2
 
+#define PIN_DIMMER 26    //testing
+
 // LEDs
 #define PIN_STATUSLED 15    //notused
 #define PIN_BREWLED   19

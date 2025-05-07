@@ -1,25 +1,20 @@
-#ifndef DIMMER_H
-#define DIMMER_H
+#pragma once
 
 #include <RBDdimmer.h>
 #include "GPIOPin.h"
 
 class Dimmer {
 public:
-    Dimmer(GPIOPin& controlPin, GPIOPin& zeroCrossPin, DIMMER_MODE_typedef mode = NORMAL_MODE);
+    Dimmer(GPIOPin& outputPin, GPIOPin& zeroCrossPin); //, int timerNum = 1
     void begin();
-    void setPower(int percentage); // 0–100%
-    void on();
-    void off();
-    bool isOn() const;
+    void setPower(int power);     // 0–100
     int getPower() const;
+    void off();
+    void on();
 
 private:
-    GPIOPin& controlPin;
-    GPIOPin& zeroCrossPin;
+    GPIOPin& output;
+    GPIOPin& zc;
     dimmerLamp dimmer;
-    bool state;
-    int power;
+    int currentPower;
 };
-
-#endif // DIMMER_H
