@@ -14,7 +14,7 @@
 
 unsigned long previousMillisMQTT;
 const unsigned long intervalMQTT = 5000;
-const unsigned long intervalMQTTbrew = 250;
+const unsigned long intervalMQTTbrew = 500;
 const unsigned long intervalMQTTstandby = 10000;
 
 WiFiClient net;

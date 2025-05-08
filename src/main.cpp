@@ -199,6 +199,7 @@ void setBDPIDTunings();
 void loopcalibrate();
 void looppid();
 void loopLED();
+void looppump();
 void checkWater();
 void printMachineState();
 char const* machinestateEnumToString(MachineState machineState);
@@ -244,8 +245,7 @@ double aggbTv = AGGBTV;
 unsigned long previousMicrosDebug = 0;
 unsigned long currentMicrosDebug = 0;
 unsigned long intervalDebug = 1000000;
-unsigned long m1 = 0;
-unsigned long m2 = 0;
+unsigned long maxloop = 0;
 
 //Dimmer
 int DimmerPower = 95;
@@ -1599,12 +1599,16 @@ void setup() {
         steamLedPin = new GPIOPin(PIN_STEAMLED, GPIOPin::OUT);
         waterLedPin = new GPIOPin(PIN_WATERLED, GPIOPin::OUT);
 
-        statusLed = new StandardLED(*statusLedPin);
-        brewLed = new StandardLED(*brewLedPin);
-        steamLed = new StandardLED(*steamLedPin);
-        waterLed = new StandardLED(*waterLedPin);
+        statusLed = new StandardLED(*statusLedPin, FEATURE_STATUS_LED);
+        brewLed = new StandardLED(*brewLedPin, FEATURE_BREW_LED);
+        steamLed = new StandardLED(*steamLedPin, FEATURE_STEAM_LED);
+        waterLed = new StandardLED(*waterLedPin, FEATURE_WATER_LED);
 
-        if (FEATURE_BREW_LED == 1) {
+        brewLed->turnOff();
+        steamLed->turnOff();
+        waterLed->turnOff();
+
+        /*if (FEATURE_BREW_LED == 1) {
             brewLed->turnOff();
         }
         else if (FEATURE_BREW_LED == 2) {
@@ -1621,7 +1625,7 @@ void setup() {
         }
         else if (FEATURE_WATER_LED == 2) {
             waterLed->turnOffInv();
-        }
+        }*/
     }
     else {
         // TODO Addressable LEDs
@@ -1754,22 +1758,39 @@ void loop() {
     // Update LED output based on machine state
     loopLED();
 
-    m1 = micros() - currentMicrosDebug;
-    if ((m1 >= m2)&&(m1<100000)) {
-        m2 = m1;
-    }
+    // Update PID output for pump pressure
+    looppump();
 
+    // Every interval, log and reset
     IFLOG(DEBUG) {
+        
+        unsigned long loopDuration = micros() - currentMicrosDebug;
+
+        // Track max loop time
+        if (loopDuration >= maxloop && loopDuration < 100000) {
+            maxloop = loopDuration;
+        }
+        // Track average
+        static unsigned long loopTotal = 0;
+        static unsigned int loopCount = 0;
+        loopTotal += loopDuration;
+        loopCount++;
+
         if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
             previousMicrosDebug = currentMicrosDebug;
-            LOGF(DEBUG, "max loop micros: %llu", m2);
-            m2 = 0;
+
+            unsigned long avgLoopMicros = loopTotal / loopCount;
+            LOGF(DEBUG, "max loop micros: %lu, avg: %lu", maxloop, avgLoopMicros);
+
+            // Reset trackers
+            maxloop = 0;
+            loopTotal = 0;
+            loopCount = 0;
         }
     }
+}
 
-    //if(pumpRelay.getPower() != DimmerPower) {
-    //    pumpRelay.setPower(DimmerPower);
-    //}
+void looppump() {
     if(pumpRelay.getState()) {
         currentMillisPressureControl = millis();
         if (currentMillisPressureControl - previousMillisPressureControl >= pressureControlInterval) {
@@ -1805,7 +1826,6 @@ void loop() {
         pressureintegral = 0;
     }
 }
-
 void looppid() {
     // Only do Wifi stuff, if Wifi is connected
     if (WiFi.status() == WL_CONNECTED && offlineMode == 0) {
@@ -2039,16 +2059,42 @@ void looppid() {
 }
 
 void loopLED() {
-    if (FEATURE_STATUS_LED) {
-        if ((machineState == kPidNormal && (fabs(temperature - setpoint) < 0.3)) || (temperature > 115 && fabs(temperature - setpoint) < 5)) {
-            statusLed->turnOn();
-        }
-        else {
-            statusLed->turnOff();
-        }
+    //if (FEATURE_STATUS_LED) {
+    if ((machineState == kPidNormal && (fabs(temperature - setpoint) < 0.3)) || (temperature > 115 && fabs(temperature - setpoint) < 5)) {
+        statusLed->turnOn();
+    }
+    else {
+        statusLed->turnOff();
+    }
+    //}
+
+    brewLed->setGPIOState(machineState == kBrew);
+    steamLed->setGPIOState(machineState == kSteam);
+    waterLed->setGPIOState(machineState == kWater);
+    
+    /*if (machineState == kBrew) {
+        brewLed->turnOn();
+    }
+    else {
+        brewLed->turnOff();
     }
 
-    if (FEATURE_BREW_LED == 1) {
+    if (machineState == kSteam) {
+        steamLed->turnOn();
+    }
+    else {
+        steamLed->turnOff();
+    }
+
+    if (machineState == kWater) {
+        waterLed->turnOn();
+    }
+    else {
+        waterLed->turnOff();
+    }*/
+
+
+    /*if (FEATURE_BREW_LED == 1) {
         if (machineState == kBrew) {
             brewLed->turnOn();
         }
@@ -2095,7 +2141,7 @@ void loopLED() {
         else {
             waterLed->turnOffInv();
         }
-    }
+    }*/
 }
 
 void checkWater() {
