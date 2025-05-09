@@ -44,7 +44,6 @@
 #include "hardware/TempSensorTSIC.h"
 #include "hardware/TempSensorK.h"
 #include "hardware/pinmapping.h"
-#include "hardware/PhaseDimmer.h"        //changed RBDdimmer to use timer 1 from timer 0
 
 // User configuration & defaults
 #include "defaults.h"
@@ -69,6 +68,14 @@ hw_timer_t* timer = NULL;
 #if (FEATURE_PRESSURESENSOR == 2)
 #include "hardware/pressureSensorAds1115.h"
 #include <Wire.h>
+#endif
+
+#if (FEATURE_PUMP_DIMMER == 1)
+#include "hardware/PSMDimmer.h"
+#endif
+
+#if (FEATURE_PUMP_DIMMER == 2)
+#include "hardware/PhaseDimmer.h"
 #endif
 
 #if OLED_DISPLAY == 3
@@ -155,6 +162,7 @@ unsigned long previousMillisPressure; // initialisation at the end of init()
 #endif
 
 Switch* waterSensor;
+Switch* encoderSw;
 
 GPIOPin* statusLedPin;
 GPIOPin* brewLedPin;
@@ -171,8 +179,16 @@ Relay heaterRelay(heaterRelayPin, HEATER_SSR_TYPE);
 
 GPIOPin pumpRelayPin(PIN_PUMP, GPIOPin::OUT);
 GPIOPin pumpZCPin(PIN_ZC, GPIOPin::IN_HARDWARE);
-//Relay pumpRelay(pumpRelayPin, PUMP_WATER_SSR_TYPE);
-Dimmer pumpRelay(pumpRelayPin, pumpZCPin, 1);
+
+#if (FEATURE_PUMP_DIMMER == 0)
+    Relay pumpRelay(pumpRelayPin, PUMP_WATER_SSR_TYPE);
+#endif
+#if (FEATURE_PUMP_DIMMER == 1)
+    Dimmer pumpRelay(pumpRelayPin, pumpZCPin, 1);
+#endif
+#if (FEATURE_PUMP_DIMMER == 2)
+    Dimmer pumpRelay(pumpRelayPin, pumpZCPin, 1);
+#endif
 
 GPIOPin valveRelayPin(PIN_VALVE, GPIOPin::OUT);
 Relay valveRelay(valveRelayPin, PUMP_VALVE_SSR_TYPE);
@@ -253,6 +269,12 @@ float setPressure = 9.0;
 unsigned long currentMillisPressureControl = 0;
 unsigned long previousMillisPressureControl = 0;
 unsigned long pressureControlInterval = 50;
+
+//Encoder
+unsigned long currentMillisEncoderSw = 0;
+unsigned long startMillisEncoderSw = 0;
+unsigned long EncoderSwitchInterval = 2000;
+bool encoderSwPressed = false;
 
 // --- PI control variables ---
 static float pressureintegral = 0.0;
@@ -1571,8 +1593,11 @@ void setup() {
 
     storageSetup();
 
+    
+#if (FEATURE_PUMP_DIMMER > 0)
     pumpRelay.begin();
     pumpRelay.setPower(DimmerPower);
+#endif
 
     heaterRelay.off();
     valveRelay.off();
@@ -1608,25 +1633,6 @@ void setup() {
         brewLed->turnOff();
         steamLed->turnOff();
         waterLed->turnOff();
-
-        /*if (FEATURE_BREW_LED == 1) {
-            brewLed->turnOff();
-        }
-        else if (FEATURE_BREW_LED == 2) {
-            brewLed->turnOffInv();
-        }
-        if (FEATURE_STEAM_LED == 1) {
-            steamLed->turnOff();
-        }
-        else if (FEATURE_STEAM_LED == 2) {
-            steamLed->turnOffInv();
-        }
-        if (FEATURE_WATER_LED == 1) {
-            waterLed->turnOff();
-        }
-        else if (FEATURE_WATER_LED == 2) {
-            waterLed->turnOffInv();
-        }*/
     }
     else {
         // TODO Addressable LEDs
@@ -1726,6 +1732,7 @@ void setup() {
     rotaryEncoder.onTurned( &knobCallback );
     rotaryEncoder.onPressed( &buttonCallback );
     rotaryEncoder.begin();
+    encoderSw = new IOSwitch(PIN_ROTARY_SW, GPIOPin::IN_PULLUP, Switch::TOGGLE, Switch::NORMALLY_CLOSED);
 
     setupDone = true;
 
@@ -1743,24 +1750,49 @@ void knobCallback(long value){
 }
 void buttonCallback(unsigned long duration){
     LOGF(INFO, "Rotary Encoder Button down for: %u ms", duration);
+    // not used
 }
 
 void loop() {
-    currentMicrosDebug = micros();
+    
     // Accept potential connections for remote logging
     Logger::update();
-
+    
     // Update water sensor
     loopWater();
 
     // Update PID settings & machine state
     looppid();
-
+    
     // Update LED output based on machine state
     loopLED();
 
     // Update PID output for pump pressure
     looppump();
+
+    if(encoderSw->isPressed()) {
+        if(encoderSwPressed == false) {
+            startMillisEncoderSw = millis();
+            encoderSwPressed = true;
+        }
+        if(millis() - startMillisEncoderSw > EncoderSwitchInterval) {   //toggle every interval
+            if(machineState == kBackflush) {
+                setBackflush(0);
+                startMillisEncoderSw = millis();
+            }
+            if(machineState == kPidNormal) {
+                setBackflush(1);
+                startMillisEncoderSw = millis();
+            }
+        }
+    }
+    else {
+        encoderSwPressed = false;
+    }
+    unsigned long currentMillisEncoderSw = 0;
+unsigned long previousMillisEncoderSw = 0;
+unsigned long EncoderSwitchInterval = 2000;
+
 
     // Every interval, log and reset
     IFLOG(DEBUG) {
@@ -1792,6 +1824,7 @@ void loop() {
 }
 
 void looppump() {
+#if (FEATURE_PUMP_DIMMER > 0) 
     if(pumpRelay.getState()) {
         currentMillisPressureControl = millis();
         if (currentMillisPressureControl - previousMillisPressureControl >= pressureControlInterval) {
@@ -1826,7 +1859,9 @@ void looppump() {
     else {
         pressureintegral = 0;
     }
+#endif
 }
+
 void looppid() {
     // Only do Wifi stuff, if Wifi is connected
     if (WiFi.status() == WL_CONNECTED && offlineMode == 0) {
@@ -1876,6 +1911,8 @@ void looppid() {
 
     testEmergencyStop(); // test if temp is too high
     bPID.Compute();      // the variable pidOutput now has new values from PID (will be written to heater pin in ISR.cpp)
+
+    currentMicrosDebug = micros();
 
     if ((millis() - lastTempEvent) > tempEventInterval) {
         // send temperatures to website endpoint
@@ -2060,89 +2097,16 @@ void looppid() {
 }
 
 void loopLED() {
-    //if (FEATURE_STATUS_LED) {
     if ((machineState == kPidNormal && (fabs(temperature - setpoint) < 0.3)) || (temperature > 115 && fabs(temperature - setpoint) < 5)) {
         statusLed->turnOn();
     }
     else {
         statusLed->turnOff();
     }
-    //}
 
     brewLed->setGPIOState(machineState == kBrew);
     steamLed->setGPIOState(machineState == kSteam);
     waterLed->setGPIOState(machineState == kWater);
-    
-    /*if (machineState == kBrew) {
-        brewLed->turnOn();
-    }
-    else {
-        brewLed->turnOff();
-    }
-
-    if (machineState == kSteam) {
-        steamLed->turnOn();
-    }
-    else {
-        steamLed->turnOff();
-    }
-
-    if (machineState == kWater) {
-        waterLed->turnOn();
-    }
-    else {
-        waterLed->turnOff();
-    }*/
-
-
-    /*if (FEATURE_BREW_LED == 1) {
-        if (machineState == kBrew) {
-            brewLed->turnOn();
-        }
-        else {
-            brewLed->turnOff();
-        }
-    }
-    else if (FEATURE_BREW_LED == 2) {
-        if (machineState == kBrew) {
-            brewLed->turnOnInv();
-        }
-        else {
-            brewLed->turnOffInv();
-        }
-    }
-    if (FEATURE_STEAM_LED == 1) {
-        if (machineState == kSteam) {
-            steamLed->turnOn();
-        }
-        else {
-            steamLed->turnOff();
-        }
-    }
-    else if (FEATURE_STEAM_LED == 2) {
-        if (machineState == kSteam) {
-            steamLed->turnOnInv();
-        }
-        else {
-            steamLed->turnOffInv();
-        }
-    }
-    if (FEATURE_WATER_LED == 1) {
-        if (machineState == kWater) {
-            waterLed->turnOn();
-        }
-        else {
-            waterLed->turnOff();
-        }
-    }
-    else if (FEATURE_WATER_LED == 2) {
-        if (machineState == kWater) {
-            waterLed->turnOnInv();
-        }
-        else {
-            waterLed->turnOffInv();
-        }
-    }*/
 }
 
 void checkWater() {
