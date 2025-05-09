@@ -44,7 +44,7 @@
 #include "hardware/TempSensorTSIC.h"
 #include "hardware/TempSensorK.h"
 #include "hardware/pinmapping.h"
-#include "hardware/Dimmer.h"        //changed RBDdimmer to use timer 1 from timer 0
+#include "hardware/PhaseDimmer.h"        //changed RBDdimmer to use timer 1 from timer 0
 
 // User configuration & defaults
 #include "defaults.h"
@@ -172,7 +172,7 @@ Relay heaterRelay(heaterRelayPin, HEATER_SSR_TYPE);
 GPIOPin pumpRelayPin(PIN_PUMP, GPIOPin::OUT);
 GPIOPin pumpZCPin(PIN_ZC, GPIOPin::IN_HARDWARE);
 //Relay pumpRelay(pumpRelayPin, PUMP_WATER_SSR_TYPE);
-Dimmer pumpRelay(pumpRelayPin, pumpZCPin);
+Dimmer pumpRelay(pumpRelayPin, pumpZCPin, 1);
 
 GPIOPin valveRelayPin(PIN_VALVE, GPIOPin::OUT);
 Relay valveRelay(valveRelayPin, PUMP_VALVE_SSR_TYPE);
@@ -253,6 +253,7 @@ float setPressure = 9.0;
 unsigned long currentMillisPressureControl = 0;
 unsigned long previousMillisPressureControl = 0;
 unsigned long pressureControlInterval = 50;
+
 // --- PI control variables ---
 static float pressureintegral = 0.0;
 const float pressureKp = 20.0;//25.0;//30.0;    // Proportional gain
