@@ -179,7 +179,7 @@ void shottimerscale() {
                 weightPreBrew = currWeight;
                 shottimerCounter = 20;
             }
-            
+
             break;
 
         case 20:
