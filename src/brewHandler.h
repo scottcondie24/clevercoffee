@@ -112,27 +112,29 @@ void checkbrewswitch() {
         // Convert momentary brew switch input to brew switch state
         switch (currBrewSwitchState) {
             case kBrewSwitchIdle:
-                if (currReadingBrewSwitch == HIGH) {
+                if ((currReadingBrewSwitch == HIGH)&&(machineState != kWaterEmpty)) {
                     currBrewSwitchState = kBrewSwitchPressed;
                     LOG(DEBUG, "Brew switch press detected -> got to currBrewSwitchState = kBrewSwitchPressed");
                 }
                 break;
 
             case kBrewSwitchPressed:                // Brew switch pressed - check for short or long press
-                if (currReadingBrewSwitch == LOW) { // Brew switch short press detected
-                    currBrewSwitchState = kBrewSwitchShortPressed;
-                    LOG(DEBUG, "Brew switch short press detected -> got to currBrewSwitchState = kBrewSwitchShortPressed; start brew");
-                }
-                else if (currReadingBrewSwitch == HIGH && brewSwitch->longPressDetected()) { // Brew switch long press detected
-                    currBrewSwitchState = kBrewSwitchLongPressed;
-                    valveRelay.on();
-                    pumpRelay.on();
-                    LOG(DEBUG, "Brew switch long press detected -> got to currBrewSwitchState = kBrewSwitchLongPressed; start manual flush");
+                if (machineState != kWaterEmpty) {
+                    if (currReadingBrewSwitch == LOW) { // Brew switch short press detected
+                        currBrewSwitchState = kBrewSwitchShortPressed;
+                        LOG(DEBUG, "Brew switch short press detected -> got to currBrewSwitchState = kBrewSwitchShortPressed; start brew");
+                    }
+                    else if (currReadingBrewSwitch == HIGH && brewSwitch->longPressDetected()) { // Brew switch long press detected
+                        currBrewSwitchState = kBrewSwitchLongPressed;
+                        valveRelay.on();
+                        pumpRelay.on();
+                        LOG(DEBUG, "Brew switch long press detected -> got to currBrewSwitchState = kBrewSwitchLongPressed; start manual flush");
 
-                    waterstatedebug = "on";
-                    if (waterstatedebug != lastwaterstatedebug) {
-                        LOGF(DEBUG, "brewhandler.h - 1 - water state: %s", waterstatedebug);
-                        lastwaterstatedebug = waterstatedebug;
+                        waterstatedebug = "on";
+                        if (waterstatedebug != lastwaterstatedebug) {
+                            LOGF(DEBUG, "brewhandler.h - 1 - water state: %s", waterstatedebug);
+                            lastwaterstatedebug = waterstatedebug;
+                        }
                     }
                 }
                 break;
