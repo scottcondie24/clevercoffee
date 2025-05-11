@@ -112,7 +112,7 @@ void checkbrewswitch() {
         // Convert momentary brew switch input to brew switch state
         switch (currBrewSwitchState) {
             case kBrewSwitchIdle:
-                if (currReadingBrewSwitch == HIGH) {
+                if ((currReadingBrewSwitch == HIGH) && (machineState != kWaterEmpty)) {
                     currBrewSwitchState = kBrewSwitchPressed;
                     LOG(DEBUG, "Brew switch press detected -> got to currBrewSwitchState = kBrewSwitchPressed");
                 }
