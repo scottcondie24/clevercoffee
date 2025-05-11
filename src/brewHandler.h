@@ -119,22 +119,20 @@ void checkbrewswitch() {
                 break;
 
             case kBrewSwitchPressed:                // Brew switch pressed - check for short or long press
-                if (machineState != kWaterEmpty) {
-                    if (currReadingBrewSwitch == LOW) { // Brew switch short press detected
-                        currBrewSwitchState = kBrewSwitchShortPressed;
-                        LOG(DEBUG, "Brew switch short press detected -> got to currBrewSwitchState = kBrewSwitchShortPressed; start brew");
-                    }
-                    else if (currReadingBrewSwitch == HIGH && brewSwitch->longPressDetected()) { // Brew switch long press detected
-                        currBrewSwitchState = kBrewSwitchLongPressed;
-                        valveRelay.on();
-                        pumpRelay.on();
-                        LOG(DEBUG, "Brew switch long press detected -> got to currBrewSwitchState = kBrewSwitchLongPressed; start manual flush");
+                if (currReadingBrewSwitch == LOW) { // Brew switch short press detected
+                    currBrewSwitchState = kBrewSwitchShortPressed;
+                    LOG(DEBUG, "Brew switch short press detected -> got to currBrewSwitchState = kBrewSwitchShortPressed; start brew");
+                }
+                else if (currReadingBrewSwitch == HIGH && brewSwitch->longPressDetected()) { // Brew switch long press detected
+                    currBrewSwitchState = kBrewSwitchLongPressed;
+                    valveRelay.on();
+                    pumpRelay.on();
+                    LOG(DEBUG, "Brew switch long press detected -> got to currBrewSwitchState = kBrewSwitchLongPressed; start manual flush");
 
-                        waterstatedebug = "on";
-                        if (waterstatedebug != lastwaterstatedebug) {
-                            LOGF(DEBUG, "brewhandler.h - 1 - water state: %s", waterstatedebug);
-                            lastwaterstatedebug = waterstatedebug;
-                        }
+                    waterstatedebug = "on";
+                    if (waterstatedebug != lastwaterstatedebug) {
+                        LOGF(DEBUG, "brewhandler.h - 1 - water state: %s", waterstatedebug);
+                        lastwaterstatedebug = waterstatedebug;
                     }
                 }
                 break;
