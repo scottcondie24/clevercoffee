@@ -307,6 +307,7 @@ bool displayFullscreenBrewTimer() {
         displayBrewtime(48, 25, timeBrewed);
 #endif
         displayWaterIcon(119, 1);
+        //buffer_ready = true;
         u8g2.sendBuffer();
         return true;
     }

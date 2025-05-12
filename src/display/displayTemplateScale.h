@@ -30,7 +30,7 @@ void printScreen() {
         // Display was updated, end here
         return;
     }
-
+    
     // If no specific machine state was printed, print default:
     u8g2.clearBuffer();
 
@@ -150,5 +150,6 @@ void printScreen() {
     // Show heater output in %
     displayProgressbar(pidOutput / 10, 30, 60, 98);
 
-    u8g2.sendBuffer();
+    buffer_ready = true;
+    //u8g2.sendBuffer();
 }

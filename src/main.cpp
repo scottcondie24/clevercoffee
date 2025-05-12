@@ -229,6 +229,7 @@ void updateStandbyTimer(void);
 void resetStandbyTimer(void);
 void knobCallback(long);
 void buttonCallback(unsigned long);
+void printLoopTimingsAsList(void);
 
 // system parameters
 uint8_t pidON = 0;   // 1 = control loop in closed loop
@@ -260,8 +261,16 @@ double aggbTv = AGGBTV;
 //Debugging timing
 unsigned long previousMicrosDebug = 0;
 unsigned long currentMicrosDebug = 0;
-unsigned long intervalDebug = 1000000;
+unsigned long intervalDebug = 50000;//5000000;
 unsigned long maxloop = 0;
+unsigned long maxpressure = 0;
+const int LOOP_HISTORY_SIZE = 20;
+unsigned long loopTimings[LOOP_HISTORY_SIZE];
+int loopIndex = 0;
+bool triggered = false;
+int triggerCountdown = 0;
+bool buffer_ready = false;
+
 
 //Dimmer
 int DimmerPower = 95;
@@ -278,10 +287,11 @@ bool encoderSwPressed = false;
 
 // --- PI control variables ---
 static float pressureintegral = 0.0;
-const float pressureKp = 20.0;//25.0;//30.0;    // Proportional gain
-const float pressureKi = 10.0;//45.0;//75.0;     // Integral gain
-const float pressureKd = 2.0;//3.0;       // Derivative gain
+const float pressureKp = 20.0;//18.0;//    13.0;   //14.0;//20.0;//25.0;//30.0;    // Proportional gain
+const float pressureKi = 10.0;//8.0;//   4.0;    //5.0;//10.0;//45.0;//75.0;     // Integral gain
+const float pressureKd = 2.0;//3.0;//  7.0;   //6.0;//2.0;//3.0;       // Derivative gain
 float previousError = 0;
+float previousRawError = 0;
 const float pressuredt = pressureControlInterval / 1000.0;  // Time step in seconds
 
 #if aggbTn == 0
@@ -1754,7 +1764,8 @@ void buttonCallback(unsigned long duration){
 }
 
 void loop() {
-    
+
+    currentMicrosDebug = micros();
     // Accept potential connections for remote logging
     Logger::update();
     
@@ -1789,20 +1800,21 @@ void loop() {
     else {
         encoderSwPressed = false;
     }
-    unsigned long currentMillisEncoderSw = 0;
-unsigned long previousMillisEncoderSw = 0;
-unsigned long EncoderSwitchInterval = 2000;
-
 
     // Every interval, log and reset
     IFLOG(DEBUG) {
         
-        unsigned long loopDuration = micros() - currentMicrosDebug;
+        /*unsigned long loopDuration = micros() - currentMicrosDebug;
 
         // Track max loop time
         if (loopDuration >= maxloop && loopDuration < 100000) {
             maxloop = loopDuration;
         }
+
+          // Store the loop duration in the circular buffer
+        loopTimings[loopIndex] = loopDuration;
+        loopIndex = (loopIndex + 1) % LOOP_HISTORY_SIZE;
+
         // Track average
         static unsigned long loopTotal = 0;
         static unsigned int loopCount = 0;
@@ -1810,17 +1822,76 @@ unsigned long EncoderSwitchInterval = 2000;
         loopCount++;
 
         if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
+            // check for long loop
+            //if (loopDuration > 5000 && !triggered) {
+                triggered = true;
+                triggerCountdown = 10;
+            //}
+
+            //Count down and log when ready
+            if(triggered){
+                if (--triggerCountdown <= 0) {
+                    triggered = false;
+
+                    previousMicrosDebug = currentMicrosDebug;
+
+                    unsigned long avgLoopMicros = loopTotal / loopCount;
+                    LOGF(DEBUG, "max loop micros: %lu, avg: %lu", maxloop, avgLoopMicros);
+
+                    printLoopTimingsAsList();
+
+                    // Reset trackers
+                    maxloop = 0;
+                    loopTotal = 0;
+                    loopCount = 0;
+                }
+            }
+        }*/
+
+        currentMicrosDebug = micros();
+        if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
             previousMicrosDebug = currentMicrosDebug;
+            if(inputPressure>0){
+                loopTimings[loopIndex] = int(inputPressure*100);
+            }
+            else {
+                loopTimings[loopIndex] = 0;
+            }
 
-            unsigned long avgLoopMicros = loopTotal / loopCount;
-            LOGF(DEBUG, "max loop micros: %lu, avg: %lu", maxloop, avgLoopMicros);
+            if (inputPressure*100 > maxpressure) {
+                maxpressure = inputPressure*100;
+            }
 
-            // Reset trackers
-            maxloop = 0;
-            loopTotal = 0;
-            loopCount = 0;
+            loopIndex = (loopIndex + 1) % LOOP_HISTORY_SIZE;
+
+            //Count down and log when ready
+            if(loopIndex == LOOP_HISTORY_SIZE-1){
+                if(maxpressure > 10) {
+                    printLoopTimingsAsList();
+                }
+                maxpressure = 0;
+            }
         }
     }
+}
+
+void printLoopTimingsAsList() {
+  char buffer[512];  // Make sure this is large enough
+  int len = 0;
+
+  len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
+
+  for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
+    int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
+    len += snprintf(buffer + len, sizeof(buffer) - len, "%lu", loopTimings[idx]);
+    if (i < LOOP_HISTORY_SIZE - 1) {
+      len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
+    }
+  }
+
+  len += snprintf(buffer + len, sizeof(buffer) - len, "]");
+
+  LOGF(DEBUG, "%s", buffer);
 }
 
 void looppump() {
@@ -1829,7 +1900,25 @@ void looppump() {
         currentMillisPressureControl = millis();
         if (currentMillisPressureControl - previousMillisPressureControl >= pressureControlInterval) {
             previousMillisPressureControl = currentMillisPressureControl;
-        
+        /*
+            //test splitting error
+            float filteredError = setPressure - inputPressureFilter;  // For P and I
+            float rawError = setPressure - inputPressure;             // For D
+
+            // Integrate filtered error
+            pressureintegral += filteredError * pressuredt;
+            pressureintegral = constrain(pressureintegral, -20.0, 20.0);
+
+            // Derivative on raw error
+            float pressurederivative = (rawError - previousRawError) / pressuredt;
+            previousRawError = rawError;
+
+            // PID Output
+            float output = (pressureKp * filteredError) + (pressureKi * pressureintegral) + (pressureKd * pressurederivative);
+*/
+
+
+            
             //float error = (setPressure) - inputPressure;
             float error = (setPressure) - inputPressureFilter;
 
@@ -1846,7 +1935,7 @@ void looppump() {
             previousError = error;
         
             float output = (pressureKp * error) + (pressureKi * pressureintegral) + (pressureKd * pressurederivative);
-        
+            
             // Convert to int and clamp to 0–95
             DimmerPower = constrain((int)output, 0, 95);
         
@@ -1858,6 +1947,8 @@ void looppump() {
     }
     else {
         pressureintegral = 0;
+        previousError = 0;
+        previousRawError = 0;
     }
 #endif
 }
@@ -1912,7 +2003,7 @@ void looppid() {
     testEmergencyStop(); // test if temp is too high
     bPID.Compute();      // the variable pidOutput now has new values from PID (will be written to heater pin in ISR.cpp)
 
-    currentMicrosDebug = micros();
+
 
     if ((millis() - lastTempEvent) > tempEventInterval) {
         // send temperatures to website endpoint
@@ -2012,6 +2103,10 @@ void looppid() {
 
     // Check if PID should run or not. If not, set to manual and force output to zero
 #if OLED_DISPLAY != 0
+    if(buffer_ready) {
+        u8g2.sendBuffer();
+        buffer_ready = false;
+    }
     printDisplayTimer();
 #endif
     if (machineState == kPidDisabled || machineState == kWaterEmpty || machineState == kSensorError || machineState == kEmergencyStop || machineState == kEepromError || machineState == kStandby ||
