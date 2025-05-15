@@ -230,6 +230,7 @@ void resetStandbyTimer(void);
 void knobCallback(long);
 void buttonCallback(unsigned long);
 void printLoopTimingsAsList(void);
+void printLoopPidAsList(void);
 
 // system parameters
 uint8_t pidON = 0;   // 1 = control loop in closed loop
@@ -263,9 +264,10 @@ unsigned long previousMicrosDebug = 0;
 unsigned long currentMicrosDebug = 0;
 unsigned long intervalDebug = 50000;//5000000;
 unsigned long maxloop = 0;
-unsigned long maxpressure = 0;
+float maxpressure = 0;
 const int LOOP_HISTORY_SIZE = 20;
 unsigned long loopTimings[LOOP_HISTORY_SIZE];
+float PidResults[LOOP_HISTORY_SIZE][6]; //Output, Target, P, I, D, Timing
 int loopIndex = 0;
 bool triggered = false;
 int triggerCountdown = 0;
@@ -287,9 +289,9 @@ bool encoderSwPressed = false;
 
 // --- PI control variables ---
 static float pressureintegral = 0.0;
-const float pressureKp = 20.0;//18.0;//    13.0;   //14.0;//20.0;//25.0;//30.0;    // Proportional gain
-const float pressureKi = 10.0;//8.0;//   4.0;    //5.0;//10.0;//45.0;//75.0;     // Integral gain
-const float pressureKd = 2.0;//3.0;//  7.0;   //6.0;//2.0;//3.0;       // Derivative gain
+const float pressureKp = 18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
+const float pressureKi = 9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
+const float pressureKd = 1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
 float previousError = 0;
 float previousRawError = 0;
 const float pressuredt = pressureControlInterval / 1000.0;  // Time step in seconds
@@ -1847,30 +1849,23 @@ void loop() {
                 }
             }
         }*/
-
         currentMicrosDebug = micros();
         if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
             previousMicrosDebug = currentMicrosDebug;
-            if(inputPressure>0){
-                loopTimings[loopIndex] = int(inputPressure*100);
-            }
-            else {
-                loopTimings[loopIndex] = 0;
-            }
 
-            if (inputPressure*100 > maxpressure) {
-                maxpressure = inputPressure*100;
+        /*    if (inputPressure > maxpressure) {
+                maxpressure = inputPressure;
             }
 
             loopIndex = (loopIndex + 1) % LOOP_HISTORY_SIZE;
 
             //Count down and log when ready
             if(loopIndex == LOOP_HISTORY_SIZE-1){
-                if(maxpressure > 10) {
+                if(maxpressure > 0.10) {
                     printLoopTimingsAsList();
                 }
                 maxpressure = 0;
-            }
+            }*/
         }
     }
 }
@@ -1879,7 +1874,8 @@ void printLoopTimingsAsList() {
   char buffer[512];  // Make sure this is large enough
   int len = 0;
 
-  len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
+  //len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
+  len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings: [");
 
   for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
     int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
@@ -1894,12 +1890,38 @@ void printLoopTimingsAsList() {
   LOGF(DEBUG, "%s", buffer);
 }
 
+void printLoopPidAsList() {
+  char buffer[512];  // Make sure this is large enough
+  for (int j = 0; j < 6; j++) {
+    int len = 0;
+    len += snprintf(buffer + len, sizeof(buffer) - len, "PID ");
+    len += snprintf(buffer + len, sizeof(buffer) - len, "%d", j);
+    len += snprintf(buffer + len, sizeof(buffer) - len, ": [");
+
+    for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
+        int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
+        len += snprintf(buffer + len, sizeof(buffer) - len, "%0.2f", PidResults[idx][j]);
+        if (i < LOOP_HISTORY_SIZE - 1) {
+            len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
+        }
+    }
+    len += snprintf(buffer + len, sizeof(buffer) - len, "]");
+
+    LOGF(DEBUG, "%s", buffer);
+  }
+}
+
 void looppump() {
 #if (FEATURE_PUMP_DIMMER > 0) 
     if(pumpRelay.getState()) {
         currentMillisPressureControl = millis();
         if (currentMillisPressureControl - previousMillisPressureControl >= pressureControlInterval) {
+            PidResults[loopIndex][5] = currentMillisPressureControl - previousMillisPressureControl;
             previousMillisPressureControl = currentMillisPressureControl;
+
+            PidResults[loopIndex][0] = inputPressure;
+            PidResults[loopIndex][1] = setPressure;
+
         /*
             //test splitting error
             float filteredError = setPressure - inputPressureFilter;  // For P and I
@@ -1936,12 +1958,29 @@ void looppump() {
         
             float output = (pressureKp * error) + (pressureKi * pressureintegral) + (pressureKd * pressurederivative);
             
+            PidResults[loopIndex][2] = pressureKp * error;
+            PidResults[loopIndex][3] = pressureKi * pressureintegral;
+            PidResults[loopIndex][4] = pressureKd * pressurederivative;
+
             // Convert to int and clamp to 0–95
             DimmerPower = constrain((int)output, 0, 95);
         
             // Only update if power changed
             if (pumpRelay.getPower() != DimmerPower) {
                 pumpRelay.setPower(DimmerPower);
+            }
+
+            if (inputPressure > maxpressure) {
+                maxpressure = inputPressure;
+            }
+            loopIndex = (loopIndex + 1) % LOOP_HISTORY_SIZE;
+
+            //Count down and log when ready
+            if(loopIndex == LOOP_HISTORY_SIZE-1){
+                if(maxpressure > 0.10) {
+                    printLoopPidAsList();
+                }
+                maxpressure = 0;
             }
         }
     }
