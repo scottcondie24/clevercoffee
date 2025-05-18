@@ -104,7 +104,7 @@ enum MachineState {
     kSteam = 40,
     kWater = 45,
     kBackflush = 50,
-    kWaterEmpty = 70,
+    kWaterTankEmpty = 70,
     kEmergencyStop = 80,
     kPidDisabled = 90,
     kStandby = 95,
@@ -161,7 +161,7 @@ const unsigned long intervalPressure = 20;
 unsigned long previousMillisPressure; // initialisation at the end of init()
 #endif
 
-Switch* waterSensor;
+Switch* waterTankSensor;
 Switch* encoderSw;
 
 GPIOPin* statusLedPin;
@@ -216,7 +216,7 @@ void loopcalibrate();
 void looppid();
 void loopLED();
 void looppump();
-void checkWater();
+void checkWaterTank();
 void printMachineState();
 char const* machinestateEnumToString(MachineState machineState);
 char* number2string(double in);
@@ -227,6 +227,7 @@ float filterPressureValue(float input);
 int writeSysParamsToMQTT(bool continueOnError);
 void updateStandbyTimer(void);
 void resetStandbyTimer(void);
+void wiFiReset(void);
 void knobCallback(long);
 void buttonCallback(unsigned long);
 void printLoopTimingsAsList(void);
@@ -388,11 +389,11 @@ const double EmergencyStopTemp = 145;         // Temp EmergencyStopTemp
 float inX = 0, inY = 0, inOld = 0, inSum = 0; // used for filterPressureValue()
 boolean setupDone = false;
 
-// Water sensor
-boolean waterFull = true;
-Timer loopWater(&checkWater, 200);  // Check water level every 200 ms
-int waterCheckConsecutiveReads = 0; // Counter for consecutive readings of water sensor
-const int waterCountsNeeded = 3;    // Number of same readings to change water sensing
+// Water tank sensor
+boolean waterTankFull = true;
+Timer loopWaterTank(&checkWaterTank, 200); // Check water tank level every 200 ms
+int waterTankCheckConsecutiveReads = 0;    // Counter for consecutive readings of water tank sensor
+const int waterTankCountsNeeded = 3;       // Number of same readings to change water tank sensing
 
 // PID controller
 unsigned long previousMillistemp; // initialisation at the end of init()
@@ -644,8 +645,8 @@ float filterPressureValue(float input) {
 void handleMachineState() {
     switch (machineState) {
         case kInit:
-            if (!waterFull) {
-                machineState = kWaterEmpty;
+            if (!waterTankFull) {
+                machineState = kWaterTankEmpty;
             }
 
             if (tempSensor->hasError()) {
@@ -715,8 +716,8 @@ void handleMachineState() {
                 machineState = kPidDisabled;
             }
 
-            if (!waterFull) {
-                machineState = kWaterEmpty;
+            if (!waterTankFull) {
+                machineState = kWaterTankEmpty;
             }
 
             if (tempSensor->hasError()) {
@@ -776,10 +777,6 @@ void handleMachineState() {
                 machineState = kPidDisabled;
             }
 
-            if (!waterFull) {
-                machineState = kWaterEmpty;
-            }
-
             if (tempSensor->hasError()) {
                 machineState = kSensorError;
             }
@@ -806,8 +803,8 @@ void handleMachineState() {
                 machineState = kPidDisabled;
             }
 
-            if (!waterFull) {
-                machineState = kWaterEmpty;
+            if (!waterTankFull) {
+                machineState = kWaterTankEmpty;
             }
 
             if (tempSensor->hasError()) {
@@ -831,8 +828,8 @@ void handleMachineState() {
                 machineState = kPidDisabled;
             }
 
-            if (!waterFull && (currBackflushState == kBackflushIdle || currBackflushState == kBackflushFinished)) {
-                machineState = kWaterEmpty;
+            if (!waterTankFull && (currBackflushState == kBackflushIdle || currBackflushState == kBackflushFinished)) {
+                machineState = kWaterTankEmpty;
             }
 
             if (tempSensor->hasError()) {
@@ -854,8 +851,8 @@ void handleMachineState() {
             }
             break;
 
-        case kWaterEmpty:
-            if (waterFull) {
+        case kWaterTankEmpty:
+            if (waterTankFull) {
                 machineState = kPidNormal;
 
                 if (standbyModeOn) {
@@ -877,8 +874,8 @@ void handleMachineState() {
                 machineState = kPidNormal;
             }
 
-            if (!waterFull) {
-                machineState = kWaterEmpty;
+            if (!waterTankFull) {
+                machineState = kWaterTankEmpty;
             }
 
             if (tempSensor->hasError()) {
@@ -988,8 +985,8 @@ char const* machinestateEnumToString(MachineState machineState) {
             return "Water";
         case kBackflush:
             return "Backflush";
-        case kWaterEmpty:
-            return "Water Empty";
+        case kWaterTankEmpty:
+            return "Water Tank Empty";
         case kEmergencyStop:
             return "Emergency Stop";
         case kPidDisabled:
@@ -1061,6 +1058,11 @@ void wiFiSetup() {
 #if OLED_DISPLAY != 0
     displayLogo(langstring_connectwifi1, wm.getWiFiSSID(true));
 #endif
+}
+
+void wiFiReset() {
+    wm.resetSettings();
+    ESP.restart();
 }
 
 /**
@@ -1662,7 +1664,7 @@ void setup() {
     }
 
     if (FEATURE_WATERTANKSENSOR == 1) {
-        waterSensor = new IOSwitch(PIN_WATERSENSOR, (WATERTANKSENSOR_TYPE == Switch::NORMALLY_OPEN ? GPIOPin::IN_PULLDOWN : GPIOPin::IN_PULLUP), Switch::TOGGLE, WATERTANKSENSOR_TYPE);
+        waterTankSensor = new IOSwitch(PIN_WATERTANKSENSOR, (WATERTANKSENSOR_TYPE == Switch::NORMALLY_OPEN ? GPIOPin::IN_PULLDOWN : GPIOPin::IN_PULLUP), Switch::TOGGLE, WATERTANKSENSOR_TYPE);
     }
 
 #if OLED_DISPLAY != 0
@@ -1789,9 +1791,9 @@ void loop() {
     currentMicrosDebug = micros();
     // Accept potential connections for remote logging
     Logger::update();
-    
-    // Update water sensor
-    loopWater();
+
+    // Update water tank sensor
+    loopWaterTank();
 
     // Update PID settings & machine state
     looppid();
@@ -2153,7 +2155,8 @@ void looppid() {
     }
     printDisplayTimer();
 #endif
-    if (machineState == kPidDisabled || machineState == kWaterEmpty || machineState == kSensorError || machineState == kEmergencyStop || machineState == kEepromError || machineState == kStandby ||
+
+    if (machineState == kPidDisabled || machineState == kWaterTankEmpty || machineState == kSensorError || machineState == kEmergencyStop || machineState == kEepromError || machineState == kStandby ||
         machineState == kBackflush || brewPIDDisabled) {
         if (bPID.GetMode() == 1) {
             // Force PID shutdown
@@ -2248,20 +2251,20 @@ void loopLED() {
     waterLed->setGPIOState(machineState == kWater);
 }
 
-void checkWater() {
+void checkWaterTank() {
     if (FEATURE_WATERTANKSENSOR != 1) {
         return;
     }
 
-    bool isWaterDetected = waterSensor->isPressed();
+    bool isWaterDetected = waterTankSensor->isPressed();
 
-    if (isWaterDetected && !waterFull) {
-        waterFull = true;
-        LOG(INFO, "Water full");
+    if (isWaterDetected && !waterTankFull) {
+        waterTankFull = true;
+        LOG(INFO, "Water tank full");
     }
-    else if (!isWaterDetected && waterFull) {
-        waterFull = false;
-        LOG(WARNING, "Water empty");
+    else if (!isWaterDetected && waterTankFull) {
+        waterTankFull = false;
+        LOG(WARNING, "Water tank empty");
     }
 }
 

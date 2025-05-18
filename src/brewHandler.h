@@ -9,7 +9,6 @@
 //  add pressure to shot timer?
 //  backflush also as bool, enable from website over diffrent var
 //  SteamOn also as bool, rethink enable from website
-//  handling !waterFull in backflush
 
 #pragma once
 
@@ -52,7 +51,7 @@ uint8_t currReadingBrewSwitch = LOW;
 bool brewSwitchWasOff = false;
 
 // Brew values
-uint8_t featureBrewControl = FEATURE_BREW_CONTROL; // enables control of pump and valve
+uint8_t featureBrewControl = FEATURE_BREW_CONTROL; // enables control of pumpe and valve
 double brewTime = BREW_TIME;                       // brewtime in s
 double preinfusion = PRE_INFUSION_TIME;            // preinfusion time in s
 double preinfusionPause = PRE_INFUSION_PAUSE_TIME; // preinfusion pause time in s
@@ -94,25 +93,64 @@ HX711_ADC LoadCell2(PIN_HXDAT2, PIN_HXCLK2);
 void checkbrewswitch() {
     brewSwitchReading = brewSwitch->isPressed();
 
-    if (BREWSWITCH_TYPE == Switch::TOGGLE) {
-        if (brewSwitchReading == HIGH && currBrewSwitchState != kBrewSwitchShortPressed) {
-            currBrewSwitchState = kBrewSwitchShortPressed;
-            LOG(DEBUG, "Toggle Brew switch is ON -> got to currBrewSwitchState = kBrewSwitchShortPressed");
-        }
-        else if (brewSwitchReading == LOW && currBrewSwitchState != kBrewSwitchIdle) {
-            currBrewSwitchState = kBrewSwitchIdle;
-            LOG(DEBUG, "Toggle Brew switch is OFF -> got to currBrewSwitchState = kBrewSwitchIdle");
+    // Block brewSwitch input when water tank is empty
+    if (machineState == kWaterTankEmpty) {
+
+        if (currBrewSwitchState == kBrewSwitchIdle || currBrewSwitchState == kBrewSwitchPressed) {
+            LOG(WARNING, "Brew switch input ignored: Water tank empty");
+            return;
         }
     }
+
+    // Convert toggle brew switch input to brew switch state
+    if (BREWSWITCH_TYPE == Switch::TOGGLE) {
+        if (currReadingBrewSwitch != brewSwitchReading) {
+            currReadingBrewSwitch = brewSwitchReading;
+        }
+
+        switch (currBrewSwitchState) {
+            case kBrewSwitchIdle:
+                if (currReadingBrewSwitch == HIGH) {
+                    currBrewSwitchState = kBrewSwitchShortPressed;
+                    LOG(DEBUG, "Toggle Brew switch is ON -> got to currBrewSwitchState = kBrewSwitchShortPressed");
+                }
+                break;
+
+            case kBrewSwitchShortPressed:
+                if (currReadingBrewSwitch == LOW) {
+                    currBrewSwitchState = kBrewSwitchIdle;
+                    LOG(DEBUG, "Toggle Brew switch is OFF -> got to currBrewSwitchState = kBrewSwitchIdle");
+                }
+                else if ((currBrewState == kBrewFinished) || (currBackflushState == kBackflushFinished)) {
+                    currBrewSwitchState = kBrewSwitchWaitForRelease;
+                    LOG(DEBUG, "Brew reached target or backflush done -> got to currBrewSwitchState = kBrewSwitchWaitForRelease");
+                }
+                break;
+
+            case kBrewSwitchWaitForRelease:
+                if (currReadingBrewSwitch == LOW) {
+                    currBrewSwitchState = kBrewSwitchIdle;
+                    LOG(DEBUG, "Brew switch reset -> got to currBrewSwitchState = kBrewSwitchIdle");
+                }
+                break;
+
+            default:
+
+                currBrewSwitchState = kBrewSwitchIdle;
+                LOG(DEBUG, "Unexpected switch state -> currBrewSwitchState = kBrewSwitchIdle");
+                break;
+        }
+    }
+
+    // Convert momentary brew switch input to brew switch state
     else if (BREWSWITCH_TYPE == Switch::MOMENTARY) {
         if (currReadingBrewSwitch != brewSwitchReading) {
             currReadingBrewSwitch = brewSwitchReading;
         }
 
-        // Convert momentary brew switch input to brew switch state
         switch (currBrewSwitchState) {
             case kBrewSwitchIdle:
-                if ((currReadingBrewSwitch == HIGH)&&(machineState != kWaterEmpty)) {
+                if (currReadingBrewSwitch == HIGH) {
                     currBrewSwitchState = kBrewSwitchPressed;
                     LOG(DEBUG, "Brew switch press detected -> got to currBrewSwitchState = kBrewSwitchPressed");
                 }
@@ -125,15 +163,7 @@ void checkbrewswitch() {
                 }
                 else if (currReadingBrewSwitch == HIGH && brewSwitch->longPressDetected()) { // Brew switch long press detected
                     currBrewSwitchState = kBrewSwitchLongPressed;
-                    valveRelay.on();
-                    pumpRelay.on();
                     LOG(DEBUG, "Brew switch long press detected -> got to currBrewSwitchState = kBrewSwitchLongPressed; start manual flush");
-
-                    waterstatedebug = "on";
-                    if (waterstatedebug != lastwaterstatedebug) {
-                        LOGF(DEBUG, "brewhandler.h - 1 - water state: %s", waterstatedebug);
-                        lastwaterstatedebug = waterstatedebug;
-                    }
                 }
                 break;
 
@@ -152,13 +182,13 @@ void checkbrewswitch() {
                 if (currReadingBrewSwitch == LOW) { // Brew switch got released after long press detected - reset brewswitch
                     currBrewSwitchState = kBrewSwitchWaitForRelease;
                     LOG(DEBUG, "Brew switch long press released -> got to currBrewSwitchState = kBrewSwitchWaitForRelease; stop manual flush");
-                    valveRelay.off();
-                    pumpRelay.off();
-                    waterstatedebug = "off";
-                    if (waterstatedebug != lastwaterstatedebug) {
-                        LOGF(DEBUG, "brewhandler.h - 2 - water state: %s", waterstatedebug);
-                        lastwaterstatedebug = waterstatedebug;
-                    }
+                    //valveRelay.off();
+                    //pumpRelay.off();
+                    //waterstatedebug = "off";
+                    //if (waterstatedebug != lastwaterstatedebug) {
+                    //    LOGF(DEBUG, "brewhandler.h - 2 - water state: %s", waterstatedebug);
+                    //    lastwaterstatedebug = waterstatedebug;
+                    //}
                 }
                 break;
 
@@ -167,6 +197,11 @@ void checkbrewswitch() {
                     currBrewSwitchState = kBrewSwitchIdle;
                     LOG(DEBUG, "Brew switch reset -> got to currBrewSwitchState = kBrewSwitchIdle");
                 }
+                break;
+
+            default:
+                currBrewSwitchState = kBrewSwitchIdle;
+                LOG(DEBUG, "Unexpected switch state -> currBrewSwitchState = kBrewSwitchIdle");
                 break;
         }
     }
@@ -211,7 +246,7 @@ bool brew() {
         // state machine for brew
         switch (currBrewState) {
             case kBrewIdle:         // waiting step for brew switch turning on
-                if (currBrewSwitchState == kBrewSwitchShortPressed && brewSwitchWasOff && backflushOn == 0 && machineState != kWaterEmpty && machineState != kBackflush) {
+                if (currBrewSwitchState == kBrewSwitchShortPressed && brewSwitchWasOff && backflushOn == 0 && machineState != kBackflush) {
                     startingTime = millis();
                     timeBrewed = 0; // reset timeBrewed, last brew is still stored
                     LOG(INFO, "Brew started");
@@ -290,7 +325,6 @@ bool brew() {
             case kBrewFinished:
                 valveRelay.off();
                 pumpRelay.off();
-
                 waterstatedebug = "off";
                 if (waterstatedebug != lastwaterstatedebug) {
                     LOGF(DEBUG, "brewhandler.h - 6 - water state: %s", waterstatedebug);
@@ -305,13 +339,19 @@ bool brew() {
                 currBrewState = kBrewIdle;
 
                 break;
+
+            default:
+                currBrewState = kBrewIdle;
+                LOG(DEBUG, "Unexpected brew state -> currBrewState = kBrewIdle");
+
+                break;
         }
     }
     else {                          // brewControlOn == 0, only brew time
 
         switch (currBrewState) {
             case kBrewIdle:         // waiting step for brew switch turning on
-                if (currBrewSwitchState == kBrewSwitchShortPressed && machineState != kWaterEmpty) {
+                if (currBrewSwitchState == kBrewSwitchShortPressed) {
                     startingTime = millis();
                     timeBrewed = 0; // reset timeBrewed, last brew is still stored
                     LOG(INFO, "Brew timer started");
@@ -335,6 +375,12 @@ bool brew() {
                 currBrewState = kBrewIdle;
 
                 break;
+
+            default:
+                currBrewState = kBrewIdle;
+                LOG(DEBUG, "Unexpected brew state -> currBrewState = kBrewIdle");
+
+                break;
         }
     }
     return (currBrewState != kBrewIdle && currBrewState != kBrewFinished);
@@ -353,17 +399,15 @@ bool manualFlush() {
 
     switch (currManualFlushState) {
         case kManualFlushIdle:
-            if (currBrewSwitchState == kBrewSwitchLongPressed && machineState != kWaterEmpty) {
+            if (currBrewSwitchState == kBrewSwitchLongPressed) {
                 startingTime = millis();
                 valveRelay.on();
                 pumpRelay.on();
-
                 waterstatedebug = "on";
                 if (waterstatedebug != lastwaterstatedebug) {
                     LOGF(DEBUG, "brewhandler.h - 7 - water state: %s", waterstatedebug);
                     lastwaterstatedebug = waterstatedebug;
                 }
-
                 LOG(INFO, "Manual flush started");
                 currManualFlushState = kManualFlushRunning;
             }
@@ -373,17 +417,21 @@ bool manualFlush() {
             if (currBrewSwitchState != kBrewSwitchLongPressed) {
                 valveRelay.off();
                 pumpRelay.off();
-
                 waterstatedebug = "off";
                 if (waterstatedebug != lastwaterstatedebug) {
                     LOGF(DEBUG, "brewhandler.h - 8 - water state: %s", waterstatedebug);
                     lastwaterstatedebug = waterstatedebug;
                 }
-
                 LOG(INFO, "Manual flush stopped");
                 LOGF(INFO, "Manual flush time: %4.1f s", timeBrewed / 1000);
                 currManualFlushState = kManualFlushIdle;
             }
+            break;
+
+        default:
+            currManualFlushState = kManualFlushIdle;
+            LOG(DEBUG, "Unexpected manual flush state -> currManualFlushState = kManualFlushIdle");
+
             break;
     }
     return (currManualFlushState == kManualFlushRunning);
@@ -418,17 +466,15 @@ void backflush() {
     // State machine for backflush
     switch (currBackflushState) {
         case kBackflushIdle:
-            if (currBrewSwitchState == kBrewSwitchShortPressed && backflushOn && brewSwitchWasOff && machineState != kWaterEmpty) {
+            if (currBrewSwitchState == kBrewSwitchShortPressed && backflushOn && brewSwitchWasOff) {
                 startingTime = millis();
                 valveRelay.on();
                 pumpRelay.on();
-
                 waterstatedebug = "on";
                 if (waterstatedebug != lastwaterstatedebug) {
                     LOGF(DEBUG, "brewhandler.h - 9 - water state: %s", waterstatedebug);
                     lastwaterstatedebug = waterstatedebug;
                 }
-
                 LOGF(INFO, "Start backflush cycle %d", currBackflushCycles);
                 LOG(INFO, "Backflush: filling portafilter");
                 currBackflushState = kBackflushFilling;
@@ -441,13 +487,11 @@ void backflush() {
                 startingTime = millis();
                 valveRelay.off();
                 pumpRelay.off();
-
                 waterstatedebug = "off";
                 if (waterstatedebug != lastwaterstatedebug) {
-                    LOGF(DEBUG, "brewhandler.h - 10 - water state: %s", waterstatedebug);
+                    LOGF(DEBUG, "brewhandler.h - 12 - water state: %s", waterstatedebug);
                     lastwaterstatedebug = waterstatedebug;
                 }
-
                 LOG(INFO, "Backflush: flushing into drip tray");
                 currBackflushState = kBackflushFlushing;
             }
@@ -459,13 +503,11 @@ void backflush() {
                     startingTime = millis();
                     valveRelay.on();
                     pumpRelay.on();
-
                     waterstatedebug = "on";
                     if (waterstatedebug != lastwaterstatedebug) {
                         LOGF(DEBUG, "brewhandler.h - 11 - water state: %s", waterstatedebug);
                         lastwaterstatedebug = waterstatedebug;
                     }
-
                     currBackflushCycles++;
                     LOGF(INFO, "Backflush: next backflush cycle %d", currBackflushCycles);
                     LOG(INFO, "Backflush: filling portafilter");
@@ -480,17 +522,21 @@ void backflush() {
         case kBackflushFinished:
             valveRelay.off();
             pumpRelay.off();
-
             waterstatedebug = "off";
             if (waterstatedebug != lastwaterstatedebug) {
                 LOGF(DEBUG, "brewhandler.h - 12 - water state: %s", waterstatedebug);
                 lastwaterstatedebug = waterstatedebug;
             }
-
             LOGF(INFO, "Backflush finished after %d cycles", currBackflushCycles);
             currBackflushCycles = 1;
             brewSwitchWasOff = false;
             currBackflushState = kBackflushIdle;
+
+            break;
+
+        default:
+            currBackflushState = kBackflushIdle;
+            LOG(DEBUG, "Unexpected backflush state -> currBackflushState = kBackflushIdle");
 
             break;
     }
