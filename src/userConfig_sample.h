@@ -68,6 +68,8 @@ enum MACHINE {
 #define LED_TYPE            LED::STANDARD           // STANDARD_LED for an LED connected to a GPIO pin, WS2812 for adressable LEDs
 #define FEATURE_WATER_SENS  0                       // 0 = deactivated, 1 = activated
 #define WATER_SENS_TYPE     Switch::NORMALLY_CLOSED // Switch::NORMALLY_CLOSED for sensor XKC-Y25-NPN or Switch::NORMALLY_OPEN for XKC-Y25-PNP
+#define FEATURE_PUMP_DIMMER 0                       // 0 = no dimmer standard relay; 1 = PSMdimmer for pump control, 2 = PhaseDimmer for pump control
+#define ENCODER_CONTROL     0                       // 0 = direct values for pump power; 1 = pressure value that pump will aim for
 
 #define FEATURE_PRESSURESENSOR 0                    // 0 = deactivated, 1 = activated
 

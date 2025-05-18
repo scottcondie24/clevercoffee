@@ -184,7 +184,7 @@ GPIOPin pumpZCPin(PIN_ZC, GPIOPin::IN_HARDWARE);
     Relay pumpRelay(pumpRelayPin, PUMP_WATER_SSR_TYPE);
 #endif
 #if (FEATURE_PUMP_DIMMER == 1)
-    Dimmer pumpRelay(pumpRelayPin, pumpZCPin, 1);
+    PSMDimmer pumpRelay(pumpRelayPin, pumpZCPin);
 #endif
 #if (FEATURE_PUMP_DIMMER == 2)
     Dimmer pumpRelay(pumpRelayPin, pumpZCPin, 1);
@@ -262,20 +262,22 @@ double aggbTv = AGGBTV;
 //Debugging timing
 unsigned long previousMicrosDebug = 0;
 unsigned long currentMicrosDebug = 0;
-unsigned long intervalDebug = 50000;//5000000;
+unsigned long intervalDebug = 5000000;//5000000;
 unsigned long maxloop = 0;
 float maxpressure = 0;
 const int LOOP_HISTORY_SIZE = 20;
 unsigned long loopTimings[LOOP_HISTORY_SIZE];
 float PidResults[LOOP_HISTORY_SIZE][6]; //Output, Target, P, I, D, Timing
 int loopIndex = 0;
+int loopIndexPid = 0;
 bool triggered = false;
 int triggerCountdown = 0;
 bool buffer_ready = false;
 
 
 //Dimmer
-int DimmerPower = 95;
+volatile int DimmerPower = 95;
+
 float setPressure = 9.0;
 unsigned long currentMillisPressureControl = 0;
 unsigned long previousMillisPressureControl = 0;
@@ -287,15 +289,24 @@ unsigned long startMillisEncoderSw = 0;
 unsigned long EncoderSwitchInterval = 2000;
 bool encoderSwPressed = false;
 
-// --- PI control variables ---
+// --- PID control variables ---
+#if FEATURE_PUMP_DIMMER == 1
+    const float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
+    const float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
+    const float pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+    int MaxDimmerPower = 100;
+#endif
+#if FEATURE_PUMP_DIMMER == 2
+    const float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
+    const float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
+    const float pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+    int MaxDimmerPower = 95;
+#endif
 static float pressureintegral = 0.0;
-const float pressureKp = 18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
-const float pressureKi = 9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
-const float pressureKd = 1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
 float previousError = 0;
 float previousRawError = 0;
 const float pressuredt = pressureControlInterval / 1000.0;  // Time step in seconds
-
+ 
 #if aggbTn == 0
 double aggbKi = 0;
 #else
@@ -1739,8 +1750,12 @@ void setup() {
 #endif
 
     rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-    rotaryEncoder.setBoundaries(20,50,false);
-    //rotaryEncoder.setBoundaries(1,80,false);
+    if(ENCODER_CONTROL == 1) {
+        rotaryEncoder.setBoundaries(20,50,false);
+    }
+    else {
+        rotaryEncoder.setBoundaries(1,100,false);
+    }
     rotaryEncoder.onTurned( &knobCallback );
     rotaryEncoder.onPressed( &buttonCallback );
     rotaryEncoder.begin();
@@ -1756,8 +1771,12 @@ void setup() {
 
 void knobCallback(long value){
     LOGF(INFO, "Rotary Encoder Value: %i", value);
-    //DimmerPower = value*2;
-    setPressure = value/5.0;
+    if(ENCODER_CONTROL == 0) {
+        DimmerPower = value;
+    }
+    else if(ENCODER_CONTROL == 1) {
+        setPressure = value/5.0;
+    }
     //pressureKp = value*1.0;
 }
 void buttonCallback(unsigned long duration){
@@ -1805,8 +1824,7 @@ void loop() {
 
     // Every interval, log and reset
     IFLOG(DEBUG) {
-        
-        /*unsigned long loopDuration = micros() - currentMicrosDebug;
+        unsigned long loopDuration = micros() - currentMicrosDebug;
 
         // Track max loop time
         if (loopDuration >= maxloop && loopDuration < 100000) {
@@ -1825,10 +1843,10 @@ void loop() {
 
         if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
             // check for long loop
-            //if (loopDuration > 5000 && !triggered) {
+            if (loopDuration > 5000 && !triggered) {
                 triggered = true;
                 triggerCountdown = 10;
-            //}
+            }
 
             //Count down and log when ready
             if(triggered){
@@ -1840,7 +1858,7 @@ void loop() {
                     unsigned long avgLoopMicros = loopTotal / loopCount;
                     LOGF(DEBUG, "max loop micros: %lu, avg: %lu", maxloop, avgLoopMicros);
 
-                    printLoopTimingsAsList();
+                    //printLoopTimingsAsList();
 
                     // Reset trackers
                     maxloop = 0;
@@ -1848,24 +1866,6 @@ void loop() {
                     loopCount = 0;
                 }
             }
-        }*/
-        currentMicrosDebug = micros();
-        if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
-            previousMicrosDebug = currentMicrosDebug;
-
-        /*    if (inputPressure > maxpressure) {
-                maxpressure = inputPressure;
-            }
-
-            loopIndex = (loopIndex + 1) % LOOP_HISTORY_SIZE;
-
-            //Count down and log when ready
-            if(loopIndex == LOOP_HISTORY_SIZE-1){
-                if(maxpressure > 0.10) {
-                    printLoopTimingsAsList();
-                }
-                maxpressure = 0;
-            }*/
         }
     }
 }
@@ -1899,7 +1899,7 @@ void printLoopPidAsList() {
     len += snprintf(buffer + len, sizeof(buffer) - len, ": [");
 
     for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
-        int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
+        int idx = (loopIndexPid + i) % LOOP_HISTORY_SIZE;
         len += snprintf(buffer + len, sizeof(buffer) - len, "%0.2f", PidResults[idx][j]);
         if (i < LOOP_HISTORY_SIZE - 1) {
             len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
@@ -1916,11 +1916,11 @@ void looppump() {
     if(pumpRelay.getState()) {
         currentMillisPressureControl = millis();
         if (currentMillisPressureControl - previousMillisPressureControl >= pressureControlInterval) {
-            PidResults[loopIndex][5] = currentMillisPressureControl - previousMillisPressureControl;
+            PidResults[loopIndexPid][5] = currentMillisPressureControl - previousMillisPressureControl;
             previousMillisPressureControl = currentMillisPressureControl;
 
-            PidResults[loopIndex][0] = inputPressure;
-            PidResults[loopIndex][1] = setPressure;
+            PidResults[loopIndexPid][0] = inputPressure;
+            PidResults[loopIndexPid][1] = setPressure;
 
         /*
             //test splitting error
@@ -1947,7 +1947,7 @@ void looppump() {
             // Integrate error
             pressureintegral += error * pressuredt;
             
-            pressureintegral = constrain(pressureintegral, -20.0, 20.0);
+            pressureintegral = constrain(pressureintegral, -6.0, 6.0);
 
             // PI output
             //float output = (pressureKp * error) + (pressureKi * pressureintegral);
@@ -1958,12 +1958,17 @@ void looppump() {
         
             float output = (pressureKp * error) + (pressureKi * pressureintegral) + (pressureKd * pressurederivative);
             
-            PidResults[loopIndex][2] = pressureKp * error;
-            PidResults[loopIndex][3] = pressureKi * pressureintegral;
-            PidResults[loopIndex][4] = pressureKd * pressurederivative;
+            PidResults[loopIndexPid][2] = pressureKp * error;
+            PidResults[loopIndexPid][3] = pressureKi * pressureintegral;
+            PidResults[loopIndexPid][4] = pressureKd * pressurederivative;
 
             // Convert to int and clamp to 0–95
-            DimmerPower = constrain((int)output, 0, 95);
+            if(ENCODER_CONTROL == 0) {
+                DimmerPower = constrain((int)DimmerPower, 0, MaxDimmerPower);
+            }
+            if(ENCODER_CONTROL == 1) {
+                DimmerPower = constrain((int)output, 0, MaxDimmerPower);
+            }
         
             // Only update if power changed
             if (pumpRelay.getPower() != DimmerPower) {
@@ -1973,10 +1978,10 @@ void looppump() {
             if (inputPressure > maxpressure) {
                 maxpressure = inputPressure;
             }
-            loopIndex = (loopIndex + 1) % LOOP_HISTORY_SIZE;
+            loopIndexPid = (loopIndexPid + 1) % LOOP_HISTORY_SIZE;
 
             //Count down and log when ready
-            if(loopIndex == LOOP_HISTORY_SIZE-1){
+            if(loopIndexPid == LOOP_HISTORY_SIZE-1){
                 if(maxpressure > 0.10) {
                     printLoopPidAsList();
                 }
