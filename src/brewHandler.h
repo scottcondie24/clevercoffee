@@ -49,6 +49,7 @@ BackflushState currBackflushState = kBackflushIdle;
 uint8_t brewSwitchReading = LOW;
 uint8_t currReadingBrewSwitch = LOW;
 bool brewSwitchWasOff = false;
+bool brewSwitchIgnoredWarning = false;
 
 // Brew values
 uint8_t featureBrewControl = FEATURE_BREW_CONTROL; // enables control of pumpe and valve
@@ -97,7 +98,10 @@ void checkbrewswitch() {
     if (machineState == kWaterTankEmpty) {
 
         if (currBrewSwitchState == kBrewSwitchIdle || currBrewSwitchState == kBrewSwitchPressed) {
-            LOG(WARNING, "Brew switch input ignored: Water tank empty");
+            if(brewSwitchIgnoredWarning == false) {
+                LOG(WARNING, "Brew switch input ignored: Water tank empty");
+                brewSwitchIgnoredWarning = true;
+            }
             return;
         }
     }
@@ -106,6 +110,7 @@ void checkbrewswitch() {
     if (BREWSWITCH_TYPE == Switch::TOGGLE) {
         if (currReadingBrewSwitch != brewSwitchReading) {
             currReadingBrewSwitch = brewSwitchReading;
+            brewSwitchIgnoredWarning = false;
         }
 
         switch (currBrewSwitchState) {
@@ -146,6 +151,7 @@ void checkbrewswitch() {
     else if (BREWSWITCH_TYPE == Switch::MOMENTARY) {
         if (currReadingBrewSwitch != brewSwitchReading) {
             currReadingBrewSwitch = brewSwitchReading;
+            brewSwitchIgnoredWarning = false;
         }
 
         switch (currBrewSwitchState) {

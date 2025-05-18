@@ -2116,7 +2116,7 @@ void looppid() {
     handleMachineState();
 
     //turn on pump if water switch is on, only turn off if not in a brew or flush state
-    if (machineState == kWaterEmpty) {
+    if (machineState == kWaterTankEmpty) {
         pumpRelay.off();
         waterstatedebug = "off-we";
     }
