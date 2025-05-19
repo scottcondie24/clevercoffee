@@ -69,9 +69,9 @@ void printScreen() {
      */
 
     // Show current weight if scale has no error
-    u8g2.setCursor(32, 26);
+    u8g2.setCursor(32, 36);
     u8g2.print(langstring_weight);
-    u8g2.setCursor(82, 26);
+    u8g2.setCursor(82, 36);
     if (scaleFailure) {
         u8g2.print("fault");
     }
@@ -90,9 +90,6 @@ void printScreen() {
         // Shown brew time and weight
         if (featureBrewControl) {
             // weight
-            u8g2.setCursor(32, 26);
-            u8g2.print(langstring_weight);
-            u8g2.setCursor(82, 26);
             u8g2.print(weightBrewed, 1);
 
             if (weightSetpoint > 0) {
@@ -102,9 +99,9 @@ void printScreen() {
             u8g2.print(" g");
 
             // time
-            u8g2.setCursor(32, 36);
+            u8g2.setCursor(32, 26);
             u8g2.print(langstring_brew);
-            u8g2.setCursor(82, 36);
+            u8g2.setCursor(82, 26);
             u8g2.print(timeBrewed / 1000, 0);
 
             if (brewTime > 0) {
@@ -117,15 +114,12 @@ void printScreen() {
         else {
         // Brew Timer with optocoupler
             // weight
-            u8g2.setCursor(32, 26);
-            u8g2.print(langstring_weight);
-            u8g2.setCursor(82, 26);
             u8g2.print(weightBrewed, 1);
             u8g2.print(" g");
             // time
-            u8g2.setCursor(32, 36);
+            u8g2.setCursor(32, 26);
             u8g2.print(langstring_brew);
-            u8g2.setCursor(82, 36);
+            u8g2.setCursor(82, 26);
             u8g2.print(timeBrewed / 1000, 0);
             u8g2.print(" s");
         }

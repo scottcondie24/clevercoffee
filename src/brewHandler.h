@@ -49,7 +49,6 @@ BackflushState currBackflushState = kBackflushIdle;
 uint8_t brewSwitchReading = LOW;
 uint8_t currReadingBrewSwitch = LOW;
 bool brewSwitchWasOff = false;
-bool brewSwitchIgnoredWarning = false;
 
 // Brew values
 uint8_t featureBrewControl = FEATURE_BREW_CONTROL; // enables control of pumpe and valve
@@ -92,25 +91,26 @@ HX711_ADC LoadCell2(PIN_HXDAT2, PIN_HXCLK2);
  * @brief Toggle or momentary input for Brew Switch
  */
 void checkbrewswitch() {
+    static bool loggedEmptyWaterTank = false;
     brewSwitchReading = brewSwitch->isPressed();
 
     // Block brewSwitch input when water tank is empty
     if (machineState == kWaterTankEmpty) {
 
-        if (currBrewSwitchState == kBrewSwitchIdle || currBrewSwitchState == kBrewSwitchPressed) {
-            if(brewSwitchIgnoredWarning == false) {
-                LOG(WARNING, "Brew switch input ignored: Water tank empty");
-                brewSwitchIgnoredWarning = true;
-            }
-            return;
+        if (!loggedEmptyWaterTank && (currBrewSwitchState == kBrewSwitchIdle || currBrewSwitchState == kBrewSwitchPressed)) {
+            LOG(WARNING, "Brew switch input ignored: Water tank empty");
+            loggedEmptyWaterTank = true;
         }
+        return;
+    }
+    else {
+        loggedEmptyWaterTank = false;
     }
 
     // Convert toggle brew switch input to brew switch state
     if (BREWSWITCH_TYPE == Switch::TOGGLE) {
         if (currReadingBrewSwitch != brewSwitchReading) {
             currReadingBrewSwitch = brewSwitchReading;
-            brewSwitchIgnoredWarning = false;
         }
 
         switch (currBrewSwitchState) {
