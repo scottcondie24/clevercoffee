@@ -295,12 +295,14 @@ bool encoderSwPressed = false;
     const float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
     const float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
     const float pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+    const float integralAntiWindup = 8.0;  //pressureintegral += error * pressuredt is capped at +-integralAntiWindup, then *pressureKi
     int MaxDimmerPower = 100;
 #endif
 #if FEATURE_PUMP_DIMMER == 2
     const float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
     const float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
     const float pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+    const float integralAntiWindup = 8.0;  //pressureintegral += error * pressuredt is capped at +-integralAntiWindup, then *pressureKi
     int MaxDimmerPower = 95;
 #endif
 static float pressureintegral = 0.0;
@@ -1931,7 +1933,7 @@ void looppump() {
 
             // Integrate filtered error
             pressureintegral += filteredError * pressuredt;
-            pressureintegral = constrain(pressureintegral, -20.0, 20.0);
+            pressureintegral = constrain(pressureintegral, -integralAntiWindup, integralAntiWindup);
 
             // Derivative on raw error
             float pressurederivative = (rawError - previousRawError) / pressuredt;
@@ -1949,7 +1951,7 @@ void looppump() {
             // Integrate error
             pressureintegral += error * pressuredt;
             
-            pressureintegral = constrain(pressureintegral, -6.0, 6.0);
+            pressureintegral = constrain(pressureintegral, -integralAntiWindup, integralAntiWindup);
 
             // PI output
             //float output = (pressureKp * error) + (pressureKi * pressureintegral);
