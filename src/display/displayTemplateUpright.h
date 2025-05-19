@@ -13,16 +13,16 @@
 void printScreen() {
 
     // Show fullscreen brew timer:
-    if (displayFullscreenBrewTimer()) {
-        // Display was updated, end here
-        return;
-    }
+    //if (displayFullscreenBrewTimer()) {
+    //    // Display was updated, end here
+    //    return;
+    //}
 
     // Show fullscreen manual flush timer:
-    if (displayFullscreenManualFlushTimer()) {
+    //if (displayFullscreenManualFlushTimer()) {
         // Display was updated, end here
-        return;
-    }
+    //    return;
+    //}
 
     // If no specific machine state was printed, print default:
 
