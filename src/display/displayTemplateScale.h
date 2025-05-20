@@ -77,14 +77,14 @@ void printScreen() {
     }
     else {
         if (shouldDisplayBrewTimer()) {
-            u8g2.print(weightBrewed, 0);
+            u8g2.print(weightBrewed, 1);
             if(featureBrewControl && weightSetpoint > 0) {
                 u8g2.print("/");
                 u8g2.print(weightSetpoint, 0);
             }
         }
         else {
-            u8g2.print(currWeight, 0);
+            u8g2.print(currWeight, 1);
         }
         u8g2.print(" g");
     }
