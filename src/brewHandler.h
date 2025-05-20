@@ -151,7 +151,6 @@ void checkbrewswitch() {
     else if (BREWSWITCH_TYPE == Switch::MOMENTARY) {
         if (currReadingBrewSwitch != brewSwitchReading) {
             currReadingBrewSwitch = brewSwitchReading;
-            brewSwitchIgnoredWarning = false;
         }
 
         switch (currBrewSwitchState) {
