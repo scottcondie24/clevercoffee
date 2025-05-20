@@ -42,6 +42,15 @@ void displayMessage(String text1, String text2, String text3, String text4, Stri
 #endif
 
 /**
+ * @brief Draw a water empty icon at the given coordinates if water supply is low
+ */
+void displayWaterIcon(int x, int y) {
+    if (!waterTankFull) {
+        u8g2.drawXBMP(x, y, 8, 8, Water_Tank_Empty_Icon);
+    }
+}
+
+/**
  * @brief print logo and message at boot
  */
 void displayLogo(String displaymessagetext, String displaymessagetext2) {
@@ -85,27 +94,84 @@ void displayEmergencyStop(void) {
 #endif
 
 /**
- * @brief display shot timer
+ * @brief determines if brew timer should be visible; postBrewTimerDuration defines how long the timer after the brew is shown
+ * @return true if timer should be visible, false otherwise
  */
-bool displayShottimer() {
-    if (((timeBrewed > 0 && featureBrewControl == 0) || (featureBrewControl > 0 && currBrewState > kBrewIdle && currBrewState <= kBrewFinished)) && featureFullscreenBrewTimer == 1) {
-        u8g2.clearBuffer();
+bool shouldDisplayBrewTimer() {
 
+    enum BrewTimerState {
+        kBrewTimerIdle = 10,
+        kBrewTimerRunning = 20,
+        kBrewTimerPostBrew = 30
+    };
+
+    static BrewTimerState currBrewTimerState = kBrewTimerIdle;
+
+    static uint32_t brewEndTime = 0;
+
+    switch (currBrewTimerState) {
+        case kBrewTimerIdle:
+            if (brew()) {
+                currBrewTimerState = kBrewTimerRunning;
+            }
+            break;
+
+        case kBrewTimerRunning:
+            if (!brew()) {
+                currBrewTimerState = kBrewTimerPostBrew;
+                brewEndTime = millis();
+            }
+            break;
+
+        case kBrewTimerPostBrew:
+            if ((millis() - brewEndTime) > (uint32_t)(postBrewTimerDuration * 1000)) {
+                currBrewTimerState = kBrewTimerIdle;
+            }
+            break;
+    }
+
+    return (currBrewTimerState != kBrewTimerIdle);
+}
+
+/**
+ * @brief display fullscreen brew timer
+ */
+bool displayFullscreenBrewTimer() {
+    if (featureFullscreenBrewTimer == 0) {
+        return false;
+    }
+
+    if (shouldDisplayBrewTimer()) {
+        u8g2.clearBuffer();
         u8g2.drawXBMP(0, 0, Brew_Cup_Logo_width, Brew_Cup_Logo_height, Brew_Cup_Logo);
         u8g2.setFont(u8g2_font_profont22_tf);
         u8g2.setCursor(5, 70);
         u8g2.print(timeBrewed / 1000, 1);
         u8g2.setFont(u8g2_font_profont11_tf);
+        displayWaterIcon(55, 1);
         u8g2.sendBuffer();
         return true;
     }
-    else if (featureFullscreenBrewTimer == 1 && millis() >= lastBrewTimeMillis && lastBrewTimeMillis + (postBrewTimerDuration * 1000) >= millis() && lastBrewTimeMillis < totalBrewTime) {
+
+    return false;
+}
+
+/**
+ * @brief display fullscreen manual flush timer
+ */
+bool displayFullscreenManualFlushTimer() {
+    if (featureFullscreenManualFlushTimer == 0) {
+        return false;
+    }
+
+    if (machineState == kManualFlush) {
         u8g2.clearBuffer();
-        u8g2.drawXBMP(0, 0, Brew_Cup_Logo_width, Brew_Cup_Logo_height, Brew_Cup_Logo);
+        u8g2.drawXBMP(0, 0, Manual_Flush_Logo_width, Manual_Flush_Logo_height, Manual_Flush_Logo);
         u8g2.setFont(u8g2_font_profont22_tf);
         u8g2.setCursor(5, 70);
-        u8g2.print((lastBrewTimeMillis - startingTime) / 1000, 1);
+        u8g2.print(timeBrewed / 1000, 1);
         u8g2.setFont(u8g2_font_profont11_tf);
+        displayWaterIcon(55, 1);
         u8g2.sendBuffer();
         return true;
     }
