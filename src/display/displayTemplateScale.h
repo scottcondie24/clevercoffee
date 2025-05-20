@@ -63,23 +63,34 @@ void printScreen() {
      * If scale has an error show fault on the display otherwise show current reading of the scale
      * if brew is running show current brew time and current brew weight
      * if brewControl is enabled and time or weight target is set show targets
-     * if brewControl is enabled show flush time during manualFlush
+     * show flush time during manualFlush
      * if FEATURE_PRESSURESENSOR is enabled show current pressure during brew
      * if brew is finished show brew values for postBrewTimerDuration
      */
 
     // Show current weight if scale has no error
-    u8g2.setCursor(32, 26);
+    u8g2.setCursor(32, 36);
     u8g2.print(langstring_weight);
-    u8g2.setCursor(82, 26);
+    u8g2.setCursor(82, 36);
     if (scaleFailure) {
         u8g2.print("fault");
     }
-    else if (machineState == kManualFlush) {
-        // Shown flush time
-        u8g2.setDrawColor(0);
-        u8g2.drawBox(32, 26, 100, 40);
-        u8g2.setDrawColor(1);
+    else {
+        if (shouldDisplayBrewTimer()) {
+            u8g2.print(weightBrewed, 0);
+            if(featureBrewControl && weightSetpoint > 0) {
+                u8g2.print("/");
+                u8g2.print(weightSetpoint, 0);
+            }
+        }
+        else {
+            u8g2.print(currWeight, 0);
+        }
+        u8g2.print(" g");
+    }
+
+    if (machineState == kManualFlush) {
+    // Shown flush time
         u8g2.setCursor(32, 26);
         u8g2.print(langstring_manual_flush);
         u8g2.setCursor(82, 26);
@@ -87,51 +98,17 @@ void printScreen() {
         u8g2.print(" s");
     }
     else if (shouldDisplayBrewTimer()) {
-        // Shown brew time and weight
-        if (featureBrewControl) {
-            // weight
-            u8g2.setCursor(32, 36);
-            u8g2.print(langstring_weight);
-            u8g2.setCursor(82, 36);
-            u8g2.print(weightBrewed, 0);
+        // time
+        u8g2.setCursor(32, 26);
+        u8g2.print(langstring_brew);
+        u8g2.setCursor(82, 26);
+        u8g2.print(timeBrewed / 1000, 0);
 
-            if (weightSetpoint > 0) {
-                u8g2.print("/");
-                u8g2.print(weightSetpoint, 0);
-            }
-            u8g2.print(" g");
-
-            // time
-            u8g2.setCursor(32, 26);
-            u8g2.print(langstring_brew);
-            u8g2.setCursor(82, 26);
-            u8g2.print(timeBrewed / 1000, 0);
-
-            if (brewTime > 0) {
-                u8g2.print("/");
-                u8g2.print(totalBrewTime / 1000, 0);
-            }
-            u8g2.print(" s");
+        if (featureBrewControl && brewTime > 0) {
+            u8g2.print("/");
+            u8g2.print(totalBrewTime / 1000, 0);
         }
-        else {
-            // Brew Timer with optocoupler
-            // weight
-            u8g2.setCursor(32, 36);
-            u8g2.print(langstring_weight);
-            u8g2.setCursor(82, 36);
-            u8g2.print(weightBrewed, 0);
-            u8g2.print(" g");
-            // time
-            u8g2.setCursor(32, 26);
-            u8g2.print(langstring_brew);
-            u8g2.setCursor(82, 26);
-            u8g2.print(timeBrewed / 1000, 0);
-            u8g2.print(" s");
-        }
-    }
-    else {
-        u8g2.print(currWeight, 0);
-        u8g2.print(" g");
+        u8g2.print(" s");
     }
 
 #if (FEATURE_PRESSURESENSOR == 1)
