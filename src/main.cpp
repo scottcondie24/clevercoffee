@@ -148,14 +148,13 @@ unsigned int wifiReconnects = 0; // actual number of reconnects
 const char* OTApass = OTAPASS;
 
 // Pressure sensor
-#if (FEATURE_PRESSURESENSOR == 1)
 float inputPressure = 0;
+#if (FEATURE_PRESSURESENSOR == 1)
 float inputPressureFilter = 0;
 const unsigned long intervalPressure = 100;
 unsigned long previousMillisPressure; // initialisation at the end of init()
 #endif
 #if (FEATURE_PRESSURESENSOR == 2)
-float inputPressure = 0;
 float inputPressureFilter = 0;
 const unsigned long intervalPressure = 20;
 unsigned long previousMillisPressure; // initialisation at the end of init()
@@ -874,10 +873,6 @@ void handleMachineState() {
         case kPidDisabled:
             if (pidON == 1) {
                 machineState = kPidNormal;
-            }
-
-            if (!waterTankFull) {
-                machineState = kWaterTankEmpty;
             }
 
             if (tempSensor->hasError()) {
