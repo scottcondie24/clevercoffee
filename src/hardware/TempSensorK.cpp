@@ -15,6 +15,10 @@ TempSensorK::TempSensorK(int GPIOPin1,int GPIOPin2,int GPIOPin3) {
 bool TempSensorK::sample_temperature(double& temperature) const {
     auto temp = kSensor_->readCelsius();
 
+    //dev board
+    //temperature = 95.0;
+    //return true;
+    
     if (temp == 0) {
         LOG(WARNING, "Temperature reading failed");
         return false;
