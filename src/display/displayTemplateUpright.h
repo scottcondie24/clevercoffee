@@ -13,20 +13,20 @@
 void printScreen() {
 
     // Show fullscreen brew timer:
-    //if (displayFullscreenBrewTimer()) {
-    //    // Display was updated, end here
-    //    return;
-    //}
+    if (displayFullscreenBrewTimer()) {
+        // Display was updated, end here
+        return;
+    }
 
     // Show fullscreen manual flush timer:
-    //if (displayFullscreenManualFlushTimer()) {
+    if (displayFullscreenManualFlushTimer()) {
         // Display was updated, end here
-    //    return;
-    //}
+        return;
+    }
 
     // If no specific machine state was printed, print default:
 
-    if ((machineState == kPidNormal || (machineState == kBrew && FEATURE_SHOTTIMER == 0) || ((machineState == kPidDisabled) && FEATURE_PIDOFF_LOGO == 0)) && (brewSwitchState != kManualFlush) ||
+    if ((machineState == kPidNormal || (machineState == kBrew && FEATURE_SHOTTIMER == 0) || ((machineState == kPidDisabled) && FEATURE_PIDOFF_LOGO == 0)) ||
         (machineState == kWaterTankEmpty) || (machineState == kPidDisabled) || (machineState == kStandby) || (machineState == kSteam)) {
         if (!tempSensor->hasError()) {
             u8g2.clearBuffer();
@@ -53,7 +53,7 @@ void printScreen() {
             u8g2.drawLine(1, 126, (pidOutput / 16.13) + 1, 126);
 
             // Show the heating logo when we are in regular PID mode
-            if (FEATURE_HEATINGLOGO > 0 && machineState == kPidNormal && (setpoint - temperature) > 0.3 && brewSwitchState != kBrewSwitchFlushOff) {
+            if (featureHeatingLogo > 0 && (machineState == kPidNormal || machineState == kSteam) && (setpoint - temperature) > 5.) {
                 // For status info
 
                 u8g2.drawXBMP(12, 50, Heating_Logo_width, Heating_Logo_height, Heating_Logo);
@@ -77,13 +77,13 @@ void printScreen() {
                 u8g2.print("Standby mode");
             }
             // Steam
-            else if (machineState == kSteam && brewSwitchState != kBrewSwitchFlushOff) {
+            else if (machineState == kSteam) {
 
                 u8g2.drawXBMP(12, 50, Steam_Logo_width, Steam_Logo_height, Steam_Logo);
             }
             // Water empty
-            else if (machineState == kWaterEmpty && brewSwitchState != kBrewSwitchFlushOff) {
-                u8g2.drawXBMP(8, 50, Water_Empty_Logo_width, Water_Empty_Logo_height, Water_Empty_Logo);
+            else if (machineState == kWaterTankEmpty) {
+                u8g2.drawXBMP(8, 50, Water_Tank_Empty_Logo_width, Water_Tank_Empty_Logo_height, Water_Tank_Empty_Logo);
             }
             else {
 
@@ -102,12 +102,12 @@ void printScreen() {
 
                 u8g2.setFont(u8g2_font_profont11_tf);
 
-                if (isBrewDetected == 1) {
+                if (shouldDisplayBrewTimer()) {
                     u8g2.setCursor(1, 75);
                     u8g2.print("BD ");
-                    u8g2.print((millis() - timeBrewDetection) / 1000, 1);
+                    u8g2.print(timeBrewed / 1000, 1);
                     u8g2.print("/");
-                    u8g2.print(brewtimesoftware, 0);
+                    u8g2.print(brewTime, 0);
                 }
 
                 // PID values above heater output bar
@@ -146,8 +146,8 @@ void printScreen() {
                 u8g2.print(timeBrewed / 1000, 0);
                 u8g2.print("/");
 
-                if (FEATURE_BREWCONTROL == 0) {
-                    u8g2.print(brewtimesoftware, 0);     // deaktivieren wenn Preinfusion ( // voransetzen )
+                if (featureBrewControl == 0) {
+                    u8g2.print(brewTime, 0);     // deaktivieren wenn Preinfusion ( // voransetzen )
                 }
                 else {
                     u8g2.print(totalBrewTime / 1000, 0); // aktivieren wenn Preinfusion
