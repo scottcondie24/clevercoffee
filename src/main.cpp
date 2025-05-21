@@ -230,6 +230,7 @@ void wiFiReset(void);
 void knobCallback(long);
 void buttonCallback(unsigned long);
 void printLoopTimingsAsList(void);
+void printActivityTimingsAsList(void);
 void printLoopPidAsList(void);
 
 // system parameters
@@ -262,17 +263,23 @@ double aggbTv = AGGBTV;
 //Debugging timing
 unsigned long previousMicrosDebug = 0;
 unsigned long currentMicrosDebug = 0;
-unsigned long intervalDebug = 5000000;//5000000;
+unsigned long intervalDebug = 2000000;//5000000;
 unsigned long maxloop = 0;
 float maxpressure = 0;
 const int LOOP_HISTORY_SIZE = 20;
 unsigned long loopTimings[LOOP_HISTORY_SIZE];
+unsigned long maxLoopTimings[LOOP_HISTORY_SIZE];
+unsigned int activityLoopTimings[LOOP_HISTORY_SIZE];
+unsigned int maxActivityLoopTimings[LOOP_HISTORY_SIZE];
 float PidResults[LOOP_HISTORY_SIZE][6]; //Output, Target, P, I, D, Timing
 int loopIndex = 0;
 int loopIndexPid = 0;
 bool triggered = false;
 int triggerCountdown = 0;
 bool buffer_ready = false;
+bool display_update = false;
+bool website_update = false;
+bool mqtt_update = false;
 
 
 //Dimmer
@@ -304,6 +311,8 @@ bool encoderSwPressed = false;
     const float integralAntiWindup = 8.0;  //pressureintegral += error * pressuredt is capped at +-integralAntiWindup, then *pressureKi
     int MaxDimmerPower = 95;
 #endif
+unsigned long blockMicrosDisplayInterval = 20000;
+unsigned long blockMicrosDisplayStart = 0;
 static float pressureintegral = 0.0;
 float previousError = 0;
 float previousRawError = 0;
@@ -1748,16 +1757,19 @@ void setup() {
     previousMillisPressure = currentTime;
 #endif
 
-    rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-    if(ENCODER_CONTROL == 1) {
-        rotaryEncoder.setBoundaries(20,50,false);
+    
+    if(ENCODER_CONTROL > 0) {
+        rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
+        if(ENCODER_CONTROL == 1) {
+            rotaryEncoder.setBoundaries(1,100,false);
+        }
+        if(ENCODER_CONTROL == 2) {
+            rotaryEncoder.setBoundaries(20,50,false);
+        }
+        rotaryEncoder.onTurned( &knobCallback );
+        rotaryEncoder.onPressed( &buttonCallback );
+        rotaryEncoder.begin();
     }
-    else {
-        rotaryEncoder.setBoundaries(1,100,false);
-    }
-    rotaryEncoder.onTurned( &knobCallback );
-    rotaryEncoder.onPressed( &buttonCallback );
-    rotaryEncoder.begin();
     encoderSw = new IOSwitch(PIN_ROTARY_SW, GPIOPin::IN_PULLUP, Switch::TOGGLE, Switch::NORMALLY_CLOSED);
 
     setupDone = true;
@@ -1770,10 +1782,10 @@ void setup() {
 
 void knobCallback(long value){
     LOGF(INFO, "Rotary Encoder Value: %i", value);
-    if(ENCODER_CONTROL == 0) {
+    if(ENCODER_CONTROL == 1) {
         DimmerPower = value;
     }
-    else if(ENCODER_CONTROL == 1) {
+    else if(ENCODER_CONTROL == 2) {
         setPressure = value/5.0;
     }
     //pressureKp = value*1.0;
@@ -1784,7 +1796,6 @@ void buttonCallback(unsigned long duration){
 }
 
 void loop() {
-
     currentMicrosDebug = micros();
     // Accept potential connections for remote logging
     Logger::update();
@@ -1792,14 +1803,16 @@ void loop() {
     // Update water tank sensor
     loopWaterTank();
 
+    // Update PID output for pump pressure
+    looppump();
+    
     // Update PID settings & machine state
     looppid();
     
     // Update LED output based on machine state
     loopLED();
 
-    // Update PID output for pump pressure
-    looppump();
+
 
     if(encoderSw->isPressed()) {
         if(encoderSwPressed == false) {
@@ -1826,12 +1839,33 @@ void loop() {
         unsigned long loopDuration = micros() - currentMicrosDebug;
 
         // Track max loop time
-        if (loopDuration >= maxloop && loopDuration < 100000) {
+        if (loopDuration >= maxloop) {// && loopDuration < 100000) {
             maxloop = loopDuration;
+            triggered = true;
+            triggerCountdown = 10;
         }
 
           // Store the loop duration in the circular buffer
         loopTimings[loopIndex] = loopDuration;
+        activityLoopTimings[loopIndex] = 0;
+        if(display_update) activityLoopTimings[loopIndex]+= 1;
+        if(website_update) activityLoopTimings[loopIndex]+= 10;
+        if(mqtt_update) activityLoopTimings[loopIndex]+= 100;
+        display_update = false;
+        website_update = false;
+        mqtt_update = false;
+
+        if(triggered){
+            if (--triggerCountdown <= 0) {
+                triggered = false;
+                for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
+                    int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
+                    maxLoopTimings[i] = loopTimings[idx];
+                    maxActivityLoopTimings[i] = activityLoopTimings[idx];
+                }
+            }
+        }
+
         loopIndex = (loopIndex + 1) % LOOP_HISTORY_SIZE;
 
         // Track average
@@ -1842,29 +1876,30 @@ void loop() {
 
         if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
             // check for long loop
-            if (loopDuration > 5000 && !triggered) {
-                triggered = true;
-                triggerCountdown = 10;
-            }
+            //if (loopDuration > 5000 && !triggered) {
+            //    triggered = true;
+            //    triggerCountdown = 10;
+            //}
 
             //Count down and log when ready
-            if(triggered){
-                if (--triggerCountdown <= 0) {
-                    triggered = false;
+            //if(triggered){
+            //    if (--triggerCountdown <= 0) {
+            //        triggered = false;
 
-                    previousMicrosDebug = currentMicrosDebug;
+            previousMicrosDebug = currentMicrosDebug;
 
-                    unsigned long avgLoopMicros = loopTotal / loopCount;
-                    LOGF(DEBUG, "max loop micros: %lu, avg: %lu", maxloop, avgLoopMicros);
+            unsigned long avgLoopMicros = loopTotal / loopCount;
+            LOGF(DEBUG, "max loop micros: %lu, avg: %lu", maxloop, avgLoopMicros);
 
-                    //printLoopTimingsAsList();
+            printLoopTimingsAsList();
+            printActivityTimingsAsList();
 
-                    // Reset trackers
-                    maxloop = 0;
-                    loopTotal = 0;
-                    loopCount = 0;
-                }
-            }
+            // Reset trackers
+            maxloop = 0;
+            loopTotal = 0;
+            loopCount = 0;
+            //    }
+            //}
         }
     }
 }
@@ -1874,11 +1909,30 @@ void printLoopTimingsAsList() {
   int len = 0;
 
   //len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
-  len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings: [");
+  len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
 
   for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
-    int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
-    len += snprintf(buffer + len, sizeof(buffer) - len, "%lu", loopTimings[idx]);
+    //int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
+    //len += snprintf(buffer + len, sizeof(buffer) - len, "%lu", loopTimings[idx]);
+    len += snprintf(buffer + len, sizeof(buffer) - len, "%lu", maxLoopTimings[i]);
+    if (i < LOOP_HISTORY_SIZE - 1) {
+      len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
+    }
+  }
+
+  len += snprintf(buffer + len, sizeof(buffer) - len, "]");
+
+  LOGF(DEBUG, "%s", buffer);
+}
+void printActivityTimingsAsList() {
+  char buffer[512];  // Make sure this is large enough
+  int len = 0;
+
+  //len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
+  len += snprintf(buffer + len, sizeof(buffer) - len, "Activity timings: [");
+
+  for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
+    len += snprintf(buffer + len, sizeof(buffer) - len, "%lu", maxActivityLoopTimings[i]);
     if (i < LOOP_HISTORY_SIZE - 1) {
       len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
     }
@@ -1898,8 +1952,8 @@ void printLoopPidAsList() {
     len += snprintf(buffer + len, sizeof(buffer) - len, ": [");
 
     for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
-        int idx = (loopIndexPid + i) % LOOP_HISTORY_SIZE;
-        len += snprintf(buffer + len, sizeof(buffer) - len, "%0.2f", PidResults[idx][j]);
+        //int idx = (loopIndexPid + i) % LOOP_HISTORY_SIZE;
+        len += snprintf(buffer + len, sizeof(buffer) - len, "%0.2f", PidResults[i][j]);
         if (i < LOOP_HISTORY_SIZE - 1) {
             len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
         }
@@ -1962,10 +2016,10 @@ void looppump() {
             PidResults[loopIndexPid][4] = pressureKd * pressurederivative;
 
             // Convert to int and clamp to 0–95
-            if(ENCODER_CONTROL == 0) {
+            if(ENCODER_CONTROL == 1) {
                 DimmerPower = constrain((int)DimmerPower, 0, MaxDimmerPower);
             }
-            if(ENCODER_CONTROL == 1) {
+            if(ENCODER_CONTROL == 2) {
                 DimmerPower = constrain((int)output, 0, MaxDimmerPower);
             }
         
@@ -1980,7 +2034,7 @@ void looppump() {
             loopIndexPid = (loopIndexPid + 1) % LOOP_HISTORY_SIZE;
 
             //Count down and log when ready
-            if(loopIndexPid == LOOP_HISTORY_SIZE-1){
+            if(loopIndexPid == 0){
                 if(maxpressure > 0.10) {
                     printLoopPidAsList();
                 }
@@ -1994,6 +2048,7 @@ void looppump() {
         previousRawError = 0;
     }
 #endif
+    blockMicrosDisplayStart = micros();
 }
 
 void looppid() {
@@ -2035,7 +2090,6 @@ void looppid() {
     else {
         checkWifi();
     }
-
     // Update the temperature:
     temperature = tempSensor->getCurrentTemperature();
 
@@ -2046,9 +2100,8 @@ void looppid() {
     testEmergencyStop(); // test if temp is too high
     bPID.Compute();      // the variable pidOutput now has new values from PID (will be written to heater pin in ISR.cpp)
 
-
-
     if ((millis() - lastTempEvent) > tempEventInterval) {
+        website_update = true;
         // send temperatures to website endpoint
         sendTempEvent(temperature, brewSetpoint, pidOutput / 10); // pidOutput is promill, so /10 to get percent value
         lastTempEvent = millis();
@@ -2144,15 +2197,19 @@ void looppid() {
     shouldDisplayBrewTimer();
 #endif
 
-    // Check if PID should run or not. If not, set to manual and force output to zero
+    //temporary - update display if not too close to pumpPID timing
 #if OLED_DISPLAY != 0
-    if(buffer_ready) {
-        u8g2.sendBuffer();
-        buffer_ready = false;
+    if(micros() - blockMicrosDisplayStart < blockMicrosDisplayInterval) {
+        if(buffer_ready) {
+            u8g2.sendBuffer();
+            buffer_ready = false;
+            display_update = true;
+        }
+        printDisplayTimer();
     }
-    printDisplayTimer();
 #endif
 
+    // Check if PID should run or not. If not, set to manual and force output to zero
     if (machineState == kPidDisabled || machineState == kWaterTankEmpty || machineState == kSensorError || machineState == kEmergencyStop || machineState == kEepromError || machineState == kStandby ||
         machineState == kBackflush || brewPIDDisabled) {
         if (bPID.GetMode() == 1) {
