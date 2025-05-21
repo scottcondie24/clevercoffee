@@ -5,21 +5,20 @@
 #include "Arduino.h"
 
 #define pulseWidth 1
-#define ALL_DIMMERS 30
 
 static int current_dim = 0;
-static dimmerLamp* dimmer[ALL_DIMMERS];
-static volatile uint16_t dimPower[ALL_DIMMERS];
-static volatile uint16_t dimOutPin[ALL_DIMMERS];
-static volatile uint16_t dimZCPin[ALL_DIMMERS];
-static volatile uint16_t zeroCross[ALL_DIMMERS];
-static volatile DIMMER_MODE_typedef dimMode[ALL_DIMMERS];
-static volatile ON_OFF_typedef dimState[ALL_DIMMERS];
-static volatile uint16_t dimCounter[ALL_DIMMERS];
-static uint16_t dimPulseBegin[ALL_DIMMERS];
-static volatile uint16_t togMax[ALL_DIMMERS];
-static volatile uint16_t togMin[ALL_DIMMERS];
-static volatile bool togDir[ALL_DIMMERS];
+static dimmerLamp* dimmer;
+static volatile uint16_t dimPower;
+static volatile uint16_t dimOutPin;
+static volatile uint16_t dimZCPin;
+static volatile uint16_t zeroCross;
+static volatile DIMMER_MODE_typedef dimMode;
+static volatile ON_OFF_typedef dimState;
+static volatile uint16_t dimCounter;
+static uint16_t dimPulseBegin;
+static volatile uint16_t togMax;
+static volatile uint16_t togMin;
+static volatile bool togDir;
 static int toggleCounter = 0;
 static int toggleReload = 25;
 
@@ -38,34 +37,30 @@ static const uint16_t powerBuf[] = {
 
 void IRAM_ATTR isr_ext()
 {
-    for (int i = 0; i < current_dim; i++) {
-        if (dimState[i] == ON) {
-            zeroCross[i] = 1;
-        }
+    if (dimState == ON) {
+        zeroCross = 1;
     }
 }
 
 void IRAM_ATTR onTimerISR()
 {
     toggleCounter++;
-    for (int k = 0; k < current_dim; k++) {
-        if (zeroCross[k]) {
-            dimCounter[k]++;
-            if (dimMode[k] == TOGGLE_MODE) {
-                if (dimPulseBegin[k] >= togMax[k]) togDir[k] = false;
-                if (dimPulseBegin[k] <= togMin[k]) togDir[k] = true;
-                if (toggleCounter == toggleReload) {
-                    dimPulseBegin[k] += (togDir[k] ? 1 : -1);
-                }
+    if (zeroCross) {
+        dimCounter++;
+        if (dimMode == TOGGLE_MODE) {
+            if (dimPulseBegin >= togMax) togDir = false;
+            if (dimPulseBegin <= togMin) togDir = true;
+            if (toggleCounter == toggleReload) {
+                dimPulseBegin += (togDir ? 1 : -1);
             }
-            if (dimCounter[k] >= dimPulseBegin[k]) {
-                digitalWrite(dimOutPin[k], HIGH);
-            }
-            if (dimCounter[k] >= dimPulseBegin[k] + pulseWidth) {
-                digitalWrite(dimOutPin[k], LOW);
-                zeroCross[k] = 0;
-                dimCounter[k] = 0;
-            }
+        }
+        if (dimCounter >= dimPulseBegin) {
+            digitalWrite(dimOutPin, HIGH);
+        }
+        if (dimCounter >= dimPulseBegin + pulseWidth) {
+            digitalWrite(dimOutPin, LOW);
+            zeroCross = 0;
+            dimCounter = 0;
         }
     }
     if (toggleCounter >= toggleReload) toggleCounter = 1;
@@ -77,16 +72,16 @@ dimmerLamp::dimmerLamp(int user_dimmer_pin, int zc_dimmer_pin, int timer_num)
 {
     current_dim++;
     current_num = current_dim - 1;
-    dimmer[current_num] = this;
+    dimmer = this;
 
-    dimOutPin[current_num] = user_dimmer_pin;
-    dimZCPin[current_num] = zc_dimmer_pin;
-    dimCounter[current_num] = 0;
-    zeroCross[current_num] = 0;
-    dimPulseBegin[current_num] = 1;
-    dimMode[current_num] = NORMAL_MODE;
-    togMin[current_num] = 0;
-    togMax[current_num] = 1;
+    dimOutPin = user_dimmer_pin;
+    dimZCPin = zc_dimmer_pin;
+    dimCounter = 0;
+    zeroCross = 0;
+    dimPulseBegin = 1;
+    dimMode = NORMAL_MODE;
+    togMin = 0;
+    togMax = 1;
     toggle_state = false;
 
     pinMode(user_dimmer_pin, OUTPUT);
@@ -108,8 +103,8 @@ void dimmerLamp::ext_int_init()
 
 void dimmerLamp::begin(DIMMER_MODE_typedef mode, ON_OFF_typedef state)
 {
-    dimMode[current_num] = mode;
-    dimState[current_num] = state;
+    dimMode = mode;
+    dimState = state;
     timer_init();
     ext_int_init();
 }
@@ -117,42 +112,42 @@ void dimmerLamp::begin(DIMMER_MODE_typedef mode, ON_OFF_typedef state)
 void dimmerLamp::setPower(int power)
 {
     if (power >= 99) power = 99;
-    dimPower[current_num] = power;
-    dimPulseBegin[current_num] = powerBuf[power];
+    dimPower = power;
+    dimPulseBegin = powerBuf[power];
     //delay(1);
 }
 
 int dimmerLamp::getPower() {
-    return (dimState[current_num] == ON) ? dimPower[current_num] : 0;
+    return (dimState == ON) ? dimPower : 0;
 }
 
 void dimmerLamp::setState(ON_OFF_typedef state) {
-    dimState[current_num] = state;
+    dimState = state;
 }
 
 bool dimmerLamp::getState() {
-    return dimState[current_num] == ON;
+    return dimState == ON;
 }
 
 void dimmerLamp::changeState() {
-    dimState[current_num] = (dimState[current_num] == ON) ? OFF : ON;
+    dimState = (dimState == ON) ? OFF : ON;
 }
 
 DIMMER_MODE_typedef dimmerLamp::getMode() {
-    return dimMode[current_num];
+    return dimMode;
 }
 
 void dimmerLamp::setMode(DIMMER_MODE_typedef mode) {
-    dimMode[current_num] = mode;
+    dimMode = mode;
 }
 
 void dimmerLamp::toggleSettings(int minValue, int maxValue)
 {
     maxValue = min(maxValue, 99);
     minValue = max(minValue, 1);
-    dimMode[current_num] = TOGGLE_MODE;
-    togMin[current_num] = powerBuf[maxValue];
-    togMax[current_num] = powerBuf[minValue];
+    dimMode = TOGGLE_MODE;
+    togMin = powerBuf[maxValue];
+    togMax = powerBuf[maxValue];
     toggleReload = 50;
 }
 
