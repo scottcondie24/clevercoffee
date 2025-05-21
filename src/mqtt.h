@@ -11,6 +11,10 @@
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include <os.h>
+#include <map>
+#include <string>
+
+std::map<std::string, std::string> mqttLastSent;
 
 unsigned long previousMillisMQTT;
 const unsigned long intervalMQTT = 5000;
@@ -228,67 +232,76 @@ void mqtt_callback(char* topic, byte* data, unsigned int length) {
 int writeSysParamsToMQTT(bool continueOnError = true) {
     unsigned long currentMillisMQTT = millis();
 
-    if (((currentMillisMQTT - previousMillisMQTT >= intervalMQTT) || ((currentMillisMQTT - previousMillisMQTT >= intervalMQTTbrew) && machineState == kBrew ) || ((currentMillisMQTT - previousMillisMQTT >= intervalMQTTstandby) && machineState == kStandby)) && FEATURE_MQTT == 1) {
+    unsigned long interval =
+        (machineState == kBrew)    ? intervalMQTTbrew :
+        (machineState == kStandby) ? intervalMQTTstandby :
+                                     intervalMQTT;
+
+    if ((currentMillisMQTT - previousMillisMQTT >= interval) && FEATURE_MQTT == 1) {
+        mqtt_update = true;
         previousMillisMQTT = currentMillisMQTT;
 
         if (mqtt.connected()) {
             mqtt_publish("status", (char*)"online");
 
             int errorState = 0;
+            char buffer[32]; // shared buffer for snprintf
 
+            // === mqttVars loop ===
             for (const auto& pair : mqttVars) {
                 editable_t* e = pair.second();
 
                 switch (e->type) {
                     case kFloat:
-                        if (!mqtt_publish(pair.first, number2string(*(float*)e->ptr), true)) {
-                            errorState = mqtt.state();
-                        }
+                        snprintf(buffer, sizeof(buffer), "%.2f", *(float*)e->ptr);
                         break;
                     case kDouble:
-                        if (!mqtt_publish(pair.first, number2string(*(double*)e->ptr), true)) {
-                            errorState = mqtt.state();
-                        }
-                        break;
                     case kDoubletime:
-                        if (!mqtt_publish(pair.first, number2string(*(double*)e->ptr), true)) {
-                            errorState = mqtt.state();
-                        }
+                        snprintf(buffer, sizeof(buffer), "%.2f", *(double*)e->ptr);
                         break;
-
                     case kInteger:
-                        if (!mqtt_publish(pair.first, number2string(*(int*)e->ptr), true)) {
-                            errorState = mqtt.state();
-                        }
+                        snprintf(buffer, sizeof(buffer), "%d", *(int*)e->ptr);
                         break;
-
                     case kUInt8:
-                        if (!mqtt_publish(pair.first, number2string(*(uint8_t*)e->ptr), true)) {
-                            errorState = mqtt.state();
-                        }
+                        snprintf(buffer, sizeof(buffer), "%u", *(uint8_t*)e->ptr);
                         break;
-
                     case kCString:
-                        if (!mqtt_publish(pair.first, number2string(*(char*)e->ptr), true)) {
-                            errorState = mqtt.state();
-                        }
+                        snprintf(buffer, sizeof(buffer), "%s", (char*)e->ptr);
                         break;
+                    default:
+                        continue; // Skip unknown types
                 }
 
-                if (errorState != 0 && !continueOnError) {
-                    // An error occurred and continueOnError is false, return the error state
-                    return errorState;
+                std::string topic = pair.first;
+                std::string value = std::string(buffer);
+
+                if (mqttLastSent[topic] != value) {
+                    if (mqtt_publish(topic.c_str(), buffer, true)) {
+                        mqttLastSent[topic] = value; // Update only if sent successfully
+                    } else {
+                        errorState = mqtt.state();
+                        if (errorState != 0 && !continueOnError) {
+                            return errorState;
+                        }
+                    }
                 }
             }
 
+            // === mqttSensors loop ===
             for (const auto& pair : mqttSensors) {
-                if (!mqtt_publish(pair.first, number2string(pair.second()))) {
-                    errorState = mqtt.state();
-                }
+                snprintf(buffer, sizeof(buffer), "%.2f", pair.second());
+                std::string topic = pair.first;
+                std::string value = std::string(buffer);
 
-                if (errorState != 0 && !continueOnError) {
-                    // An error occurred and continueOnError is false, return the error state
-                    return errorState;
+                if (mqttLastSent[topic] != value) {
+                    if (mqtt_publish(topic.c_str(), buffer)) {
+                        mqttLastSent[topic] = value;
+                    } else {
+                        errorState = mqtt.state();
+                        if (errorState != 0 && !continueOnError) {
+                            return errorState;
+                        }
+                    }
                 }
             }
         }
