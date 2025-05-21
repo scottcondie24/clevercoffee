@@ -144,11 +144,39 @@ bool displayFullscreenBrewTimer() {
     if (shouldDisplayBrewTimer()) {
         u8g2.clearBuffer();
         u8g2.drawXBMP(0, 0, Brew_Cup_Logo_width, Brew_Cup_Logo_height, Brew_Cup_Logo);
-        u8g2.setFont(u8g2_font_profont22_tf);
-        u8g2.setCursor(5, 70);
-        u8g2.print(timeBrewed / 1000, 1);
-        u8g2.setFont(u8g2_font_profont11_tf);
         displayWaterIcon(55, 1);
+        if(FEATURE_SCALE) {
+            u8g2.setFont(u8g2_font_profont22_tf);
+            u8g2.setCursor(5, 50);
+            u8g2.print(timeBrewed / 1000, 1);
+            u8g2.setCursor(5, 75);
+            if (scaleFailure) {
+                u8g2.print("fault");
+            }
+            else {
+                u8g2.print(weightBrewed, 1);
+                    //if(featureBrewControl && weightSetpoint > 0) {
+                    //    u8g2.print("/");
+                    //    u8g2.print(weightSetpoint, 0);
+                    //}
+            }
+        }
+        else {
+            u8g2.setFont(u8g2_font_profont22_tf);
+            u8g2.setCursor(5, 70);
+            u8g2.print(timeBrewed / 1000, 1);
+        }
+
+        if(FEATURE_PRESSURESENSOR > 0) {
+            u8g2.setFont(u8g2_font_profont11_tf);
+            u8g2.setCursor(5, 100);
+            u8g2.print("P:");
+            u8g2.print(inputPressure, 2);
+            u8g2.setCursor(5, 115);
+            u8g2.print(DimmerPower,0);
+            u8g2.print(" ");
+            u8g2.print(setPressure,1);
+        }
         u8g2.sendBuffer();
         return true;
     }
@@ -178,3 +206,59 @@ bool displayFullscreenManualFlushTimer() {
 
     return false;
 }
+
+/*
+Scrolling text example
+
+int offset = 0;
+
+void setup() {
+  u8g2.begin();
+}
+
+void loop() {
+  const char* scrollText = "Scrolling long text message using U8G2 on SSD1306...";
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_ncenB08_tr);
+
+  int textWidth = u8g2.getStrWidth(scrollText);
+  int x = 128 - offset;
+  u8g2.drawStr(x, 24, scrollText);
+
+  u8g2.sendBuffer();
+
+  offset++;
+  if (offset > textWidth + 128) offset = 0;
+
+  delay(50);
+}*/
+
+
+/*
+overflow to new line example
+void loop() {
+  const char* longText = "This is a very long string that needs to wrap properly on the screen.";
+  u8g2.clearBuffer();
+
+  int x = 0;
+  int y = 10;
+  int maxWidth = 128; // screen width
+  char buffer[100];
+  int bufferIndex = 0;
+
+  for (int i = 0; longText[i] != '\0'; i++) {
+    buffer[bufferIndex++] = longText[i];
+    buffer[bufferIndex] = '\0';
+
+    int w = u8g2.getStrWidth(buffer);
+    if (w > maxWidth || longText[i + 1] == '\0') {
+      u8g2.drawStr(x, y, buffer);
+      y += u8g2.getMaxCharHeight();
+      bufferIndex = 0;
+    }
+  }
+
+  u8g2.sendBuffer();
+  delay(2000);
+}
+*/
