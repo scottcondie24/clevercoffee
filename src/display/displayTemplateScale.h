@@ -68,6 +68,13 @@ void printScreen() {
      * if brew is finished show brew values for postBrewTimerDuration
      */
 
+    //dev board
+    
+    //scaleFailure = false;
+    //currWeight = 30.5;
+    //weightBrewed = 22.3;
+    
+
     // Show current weight if scale has no error
     u8g2.setCursor(32, 36);
     u8g2.print(langstring_weight);
