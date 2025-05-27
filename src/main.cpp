@@ -147,8 +147,13 @@ unsigned int wifiReconnects = 0; // actual number of reconnects
 // OTA
 const char* OTApass = OTAPASS;
 
-// Pressure sensor
-float inputPressure = 0;
+// Profiles
+#include "brewProfiles.h"
+int currentRecipeIndex = 0;
+const char*  recipeName;
+const char*  phaseName;
+
+//Pressure Sensor
 #if (FEATURE_PRESSURESENSOR == 1)
 float inputPressureFilter = 0;
 const unsigned long intervalPressure = 100;
@@ -232,6 +237,7 @@ void buttonCallback(unsigned long);
 void printLoopTimingsAsList(void);
 void printActivityTimingsAsList(void);
 void printLoopPidAsList(void);
+void runRecipe(int);
 
 // system parameters
 uint8_t pidON = 0;   // 1 = control loop in closed loop
@@ -263,15 +269,17 @@ double aggbTv = AGGBTV;
 //Debugging timing
 unsigned long previousMicrosDebug = 0;
 unsigned long currentMicrosDebug = 0;
-unsigned long intervalDebug = 2000000;//5000000;
+unsigned long intervalDebug = 5000000;
 unsigned long maxloop = 0;
+unsigned long maxActivity = 0;
 float maxpressure = 0;
 const int LOOP_HISTORY_SIZE = 20;
+const int TYPE_HISTORY_SIZE = 8;
 unsigned long loopTimings[LOOP_HISTORY_SIZE];
 unsigned long maxLoopTimings[LOOP_HISTORY_SIZE];
 unsigned int activityLoopTimings[LOOP_HISTORY_SIZE];
 unsigned int maxActivityLoopTimings[LOOP_HISTORY_SIZE];
-float PidResults[LOOP_HISTORY_SIZE][6]; //Output, Target, P, I, D, Timing
+float PidResults[LOOP_HISTORY_SIZE][TYPE_HISTORY_SIZE]; //Output, Target, Flow, FlowTarget, P, I, D, Timing
 int loopIndex = 0;
 int loopIndexPid = 0;
 bool triggered = false;
@@ -280,43 +288,49 @@ bool buffer_ready = false;
 bool display_update = false;
 bool website_update = false;
 bool mqtt_update = false;
-
-
-//Dimmer
-volatile int DimmerPower = 95;
-
-float setPressure = 9.0;
-unsigned long currentMillisPressureControl = 0;
-unsigned long previousMillisPressureControl = 0;
-unsigned long pressureControlInterval = 50;
+bool HASSIO_update = false;
 
 //Encoder
 unsigned long currentMillisEncoderSw = 0;
 unsigned long startMillisEncoderSw = 0;
-unsigned long EncoderSwitchInterval = 2000;
+unsigned long EncoderSwitchBackflushInterval = 2000;
+unsigned long EncoderSwitchControlInterval = 1000;
 bool encoderSwPressed = false;
+int encodercontrol = ENCODER_CONTROL;
+
+//Pump
+float inputPressure = 0;
+float pumpFlowRate = 0;
+volatile float setPressure = 9.0;
+volatile float setPumpFlowRate = 6.0;
+volatile float flowKp = 9.0;
+volatile float flowKi = 30.0;
+volatile float flowKd = 0.0;
+volatile int DimmerPower = 95;
+unsigned long currentMillisPumpControl = 0;
+unsigned long previousMillisPumpControl = 0;
+unsigned long pumpControlInterval = 50;
 
 // --- PID control variables ---
 #if FEATURE_PUMP_DIMMER == 1
-    const float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
-    const float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
-    const float pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
-    const float integralAntiWindup = 8.0;  //pressureintegral += error * pressuredt is capped at +-integralAntiWindup, then *pressureKi
+    const float pumpKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
+    const float pumpKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
+    const float pumpKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+    const float integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pumpKi
     int MaxDimmerPower = 100;
 #endif
 #if FEATURE_PUMP_DIMMER == 2
-    const float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
-    const float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
-    const float pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
-    const float integralAntiWindup = 8.0;  //pressureintegral += error * pressuredt is capped at +-integralAntiWindup, then *pressureKi
+    const float pumpKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
+    const float pumpKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
+    const float pumpKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+    const float integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pumpKi
     int MaxDimmerPower = 95;
 #endif
 unsigned long blockMicrosDisplayInterval = 20000;
 unsigned long blockMicrosDisplayStart = 0;
-static float pressureintegral = 0.0;
+static float pumpintegral = 0.0;
 float previousError = 0;
-float previousRawError = 0;
-const float pressuredt = pressureControlInterval / 1000.0;  // Time step in seconds
+const float pumpdt = pumpControlInterval / 1000.0;  // Time step in seconds
  
 #if aggbTn == 0
 double aggbKi = 0;
@@ -1760,12 +1774,7 @@ void setup() {
     
     if(ENCODER_CONTROL > 0) {
         rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-        if(ENCODER_CONTROL == 1) {
-            rotaryEncoder.setBoundaries(1,100,false);
-        }
-        if(ENCODER_CONTROL == 2) {
-            rotaryEncoder.setBoundaries(20,50,false);
-        }
+        rotaryEncoder.setBoundaries(0,100,true);
         rotaryEncoder.onTurned( &knobCallback );
         rotaryEncoder.onPressed( &buttonCallback );
         rotaryEncoder.begin();
@@ -1781,14 +1790,55 @@ void setup() {
 }
 
 void knobCallback(long value){
+    static long lastencodervalue = 0;
+    float tempvalue = 0.0;      //use a tempvalue so only the final result is written to each variable
+
     LOGF(INFO, "Rotary Encoder Value: %i", value);
-    if(ENCODER_CONTROL == 1) {
-        DimmerPower = value;
+
+    if((value < 10) && (lastencodervalue > 90)) {
+        lastencodervalue -= 101;
     }
-    else if(ENCODER_CONTROL == 2) {
-        setPressure = value/5.0;
+    else if((value > 90) && (lastencodervalue < 10)) {
+        lastencodervalue += 101;
     }
-    //pressureKp = value*1.0;
+
+    if(encodercontrol == 1) {
+        tempvalue = DimmerPower + (value-lastencodervalue);
+        DimmerPower = constrain(tempvalue, 0, 100);
+    }
+    else if(encodercontrol == 2) {
+        tempvalue = (value-lastencodervalue)/5.0;
+        tempvalue = setPressure + tempvalue;
+        setPressure = constrain(tempvalue, 4.0, 10.0);    //4-10
+    }
+    else if(encodercontrol == 3) {
+        tempvalue = (value-lastencodervalue); 
+        tempvalue = currentRecipeIndex + tempvalue;
+        currentRecipeIndex = constrain(tempvalue, 0.0, recipesCount - 1);    //0-recipesCount
+        recipeName = recipes[currentRecipeIndex].name;
+        LOGF(INFO, "Recipe Index: %i -- Recipe Name: %s", currentRecipeIndex, recipeName);
+    }
+    else if(encodercontrol == 4) {
+        tempvalue = (value-lastencodervalue)/5.0; 
+        tempvalue = setPumpFlowRate + tempvalue;
+        setPumpFlowRate = constrain(tempvalue, 0.0, 10.0);    //0-10
+    }
+    else if(encodercontrol == 5) {
+        tempvalue = (value-lastencodervalue)/5.0; 
+        tempvalue = flowKp + tempvalue;
+        flowKp = constrain(tempvalue, 0.0, 40.0);    //0-40
+    }
+    else if(encodercontrol == 6) {
+        tempvalue = (value-lastencodervalue)/5.0; 
+        tempvalue = flowKi + tempvalue;
+        flowKi = constrain(tempvalue, 0.0, 40.0);    //0-40
+    }
+    else if(encodercontrol == 7) {
+        tempvalue = (value-lastencodervalue)/100.0; 
+        tempvalue = flowKd + tempvalue;
+        flowKd = constrain(tempvalue, 0.0, 4.0);    //0-4
+    }
+    lastencodervalue = value;
 }
 void buttonCallback(unsigned long duration){
     LOGF(INFO, "Rotary Encoder Button down for: %u ms", duration);
@@ -1803,7 +1853,7 @@ void loop() {
     // Update water tank sensor
     loopWaterTank();
 
-    // Update PID output for pump pressure
+    // Update PID output for pump control
     looppump();
     
     // Update PID settings & machine state
@@ -1819,18 +1869,31 @@ void loop() {
             startMillisEncoderSw = millis();
             encoderSwPressed = true;
         }
-        if(millis() - startMillisEncoderSw > EncoderSwitchInterval) {   //toggle every interval
-            if(machineState == kBackflush) {
-                setBackflush(0);
-                startMillisEncoderSw = millis();
-            }
-            if(machineState == kPidNormal) {
-                setBackflush(1);
-                startMillisEncoderSw = millis();
-            }
-        }
     }
     else {
+        if(encoderSwPressed == true) {
+            unsigned long duration = millis() - startMillisEncoderSw;
+            if(duration > EncoderSwitchBackflushInterval) {   //toggle every interval
+                if(machineState == kBackflush) {
+                    setBackflush(0);
+                    startMillisEncoderSw = millis();
+                }
+                if(machineState == kPidNormal) {
+                    setBackflush(1);
+                    startMillisEncoderSw = millis();
+                }
+            }
+            else if(duration > EncoderSwitchControlInterval) {   //toggle every interval
+                encodercontrol += 1;
+                if(encodercontrol > 7) {
+                    encodercontrol = 1;
+                }
+                LOGF(INFO, "Rotary Encoder Mode Changed: %i", encodercontrol);
+                pumpintegral = 0;
+                previousError = 0;
+            }
+            LOGF(INFO, "Rotary Encoder Button down for: %lu ms", duration);
+        }
         encoderSwPressed = false;
     }
 
@@ -1843,17 +1906,21 @@ void loop() {
             maxloop = loopDuration;
             triggered = true;
             triggerCountdown = 10;
+            maxActivity = 0;
         }
 
           // Store the loop duration in the circular buffer
         loopTimings[loopIndex] = loopDuration;
         activityLoopTimings[loopIndex] = 0;
-        if(display_update) activityLoopTimings[loopIndex]+= 1;
-        if(website_update) activityLoopTimings[loopIndex]+= 10;
-        if(mqtt_update) activityLoopTimings[loopIndex]+= 100;
+        if(buffer_ready) activityLoopTimings[loopIndex]+= 1;
+        if(display_update) activityLoopTimings[loopIndex]+= 10;
+        if(website_update) activityLoopTimings[loopIndex]+= 100;
+        if(mqtt_update) activityLoopTimings[loopIndex]+= 1000;
+        if(HASSIO_update) activityLoopTimings[loopIndex]+= 10000;
         display_update = false;
         website_update = false;
         mqtt_update = false;
+        HASSIO_update = false;
 
         if(triggered){
             if (--triggerCountdown <= 0) {
@@ -1862,6 +1929,9 @@ void loop() {
                     int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
                     maxLoopTimings[i] = loopTimings[idx];
                     maxActivityLoopTimings[i] = activityLoopTimings[idx];
+                    if(activityLoopTimings[idx] > maxActivity) {
+                        maxActivity = activityLoopTimings[idx];
+                    }
                 }
             }
         }
@@ -1875,31 +1945,23 @@ void loop() {
         loopCount++;
 
         if (currentMicrosDebug - previousMicrosDebug >= intervalDebug) {
-            // check for long loop
-            //if (loopDuration > 5000 && !triggered) {
-            //    triggered = true;
-            //    triggerCountdown = 10;
-            //}
-
-            //Count down and log when ready
-            //if(triggered){
-            //    if (--triggerCountdown <= 0) {
-            //        triggered = false;
-
             previousMicrosDebug = currentMicrosDebug;
 
             unsigned long avgLoopMicros = loopTotal / loopCount;
             LOGF(DEBUG, "max loop micros: %lu, avg: %lu", maxloop, avgLoopMicros);
+            if((maxActivity > 10)||(maxloop > 40000)){
+                printLoopTimingsAsList();
+                printActivityTimingsAsList();
 
-            printLoopTimingsAsList();
-            printActivityTimingsAsList();
+                LOGF(DEBUG, "There are %d recipes", recipesCount);
+                runRecipe(currentRecipeIndex);
+            }
 
             // Reset trackers
             maxloop = 0;
+            maxActivity = 0;
             loopTotal = 0;
             loopCount = 0;
-            //    }
-            //}
         }
     }
 }
@@ -1907,119 +1969,107 @@ void loop() {
 void printLoopTimingsAsList() {
   char buffer[512];  // Make sure this is large enough
   int len = 0;
-
-  //len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
   len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
-
   for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
-    //int idx = (loopIndex + i) % LOOP_HISTORY_SIZE;
-    //len += snprintf(buffer + len, sizeof(buffer) - len, "%lu", loopTimings[idx]);
     len += snprintf(buffer + len, sizeof(buffer) - len, "%lu", maxLoopTimings[i]);
     if (i < LOOP_HISTORY_SIZE - 1) {
       len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
     }
   }
-
   len += snprintf(buffer + len, sizeof(buffer) - len, "]");
-
   LOGF(DEBUG, "%s", buffer);
 }
+
 void printActivityTimingsAsList() {
   char buffer[512];  // Make sure this is large enough
   int len = 0;
-
-  //len += snprintf(buffer + len, sizeof(buffer) - len, "Loop timings (us): [");
   len += snprintf(buffer + len, sizeof(buffer) - len, "Activity timings: [");
-
   for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
     len += snprintf(buffer + len, sizeof(buffer) - len, "%lu", maxActivityLoopTimings[i]);
     if (i < LOOP_HISTORY_SIZE - 1) {
       len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
     }
   }
-
   len += snprintf(buffer + len, sizeof(buffer) - len, "]");
-
   LOGF(DEBUG, "%s", buffer);
 }
 
 void printLoopPidAsList() {
   char buffer[512];  // Make sure this is large enough
-  for (int j = 0; j < 6; j++) {
+  for (int j = 0; j < TYPE_HISTORY_SIZE; j++) {
     int len = 0;
     len += snprintf(buffer + len, sizeof(buffer) - len, "PID ");
     len += snprintf(buffer + len, sizeof(buffer) - len, "%d", j);
     len += snprintf(buffer + len, sizeof(buffer) - len, ": [");
-
     for (int i = 0; i < LOOP_HISTORY_SIZE; i++) {
-        //int idx = (loopIndexPid + i) % LOOP_HISTORY_SIZE;
         len += snprintf(buffer + len, sizeof(buffer) - len, "%0.2f", PidResults[i][j]);
         if (i < LOOP_HISTORY_SIZE - 1) {
             len += snprintf(buffer + len, sizeof(buffer) - len, ", ");
         }
     }
     len += snprintf(buffer + len, sizeof(buffer) - len, "]");
-
     LOGF(DEBUG, "%s", buffer);
   }
 }
 
 void looppump() {
 #if (FEATURE_PUMP_DIMMER > 0) 
+    static float inputPID = 0.0;
+    static float targetPID = 0.0;                
+    static float inputKp = 0.0;
+    static float inputKi = 0.0;
+    static float inputKd = 0.0;
     if(pumpRelay.getState()) {
-        currentMillisPressureControl = millis();
-        if (currentMillisPressureControl - previousMillisPressureControl >= pressureControlInterval) {
-            PidResults[loopIndexPid][5] = currentMillisPressureControl - previousMillisPressureControl;
-            previousMillisPressureControl = currentMillisPressureControl;
+        currentMillisPumpControl = millis();
+        if (currentMillisPumpControl - previousMillisPumpControl >= pumpControlInterval) {
+            PidResults[loopIndexPid][7] = currentMillisPumpControl - previousMillisPumpControl;
+            previousMillisPumpControl = currentMillisPumpControl;
 
             PidResults[loopIndexPid][0] = inputPressure;
             PidResults[loopIndexPid][1] = setPressure;
+            PidResults[loopIndexPid][2] = pumpFlowRate;
+            PidResults[loopIndexPid][3] = setPumpFlowRate;
 
-        /*
-            //test splitting error
-            float filteredError = setPressure - inputPressureFilter;  // For P and I
-            float rawError = setPressure - inputPressure;             // For D
+            if((encodercontrol == 2) || (encodercontrol == 3)) {   //pressure   and temporary recipes
+                inputPID = inputPressureFilter;//inputPressure;
+                targetPID = setPressure;
+                inputKp = pumpKp;
+                inputKi = pumpKi;
+                inputKd = pumpKd;
+            }
 
-            // Integrate filtered error
-            pressureintegral += filteredError * pressuredt;
-            pressureintegral = constrain(pressureintegral, -integralAntiWindup, integralAntiWindup);
-
-            // Derivative on raw error
-            float pressurederivative = (rawError - previousRawError) / pressuredt;
-            previousRawError = rawError;
-
-            // PID Output
-            float output = (pressureKp * filteredError) + (pressureKi * pressureintegral) + (pressureKd * pressurederivative);
-*/
-
-
+            else if (encodercontrol >= 4) { //flow and PID tuning
+                inputPID = pumpFlowRate;
+                targetPID = setPumpFlowRate;
+                inputKp = flowKp;
+                inputKi = flowKi;
+                inputKd = flowKd;
+            }
+            else {
+                inputPID = 0.0;
+                targetPID = 0.0;
+                inputKp = 0.0;
+                inputKi = 0.0;
+                inputKd = 0.0;
+            }
             
-            //float error = (setPressure) - inputPressure;
-            float error = (setPressure) - inputPressureFilter;
-
-            // Integrate error
-            pressureintegral += error * pressuredt;
-            
-            pressureintegral = constrain(pressureintegral, -integralAntiWindup, integralAntiWindup);
-
-            // PI output
-            //float output = (pressureKp * error) + (pressureKi * pressureintegral);
-
-            //PID output
-            float pressurederivative = (error - previousError) / pressuredt;
+            float error = targetPID - inputPID;
+            pumpintegral += error * pumpdt; // Integrate error
+            pumpintegral = constrain(pumpintegral, -integralAntiWindup, integralAntiWindup);
+            float pumpderivative = (error - previousError) / pumpdt;
             previousError = error;
-        
-            float output = (pressureKp * error) + (pressureKi * pressureintegral) + (pressureKd * pressurederivative);
+            //PID output
+            float output = (inputKp * error) + (inputKi * pumpintegral) + (inputKd * pumpderivative);
             
-            PidResults[loopIndexPid][2] = pressureKp * error;
-            PidResults[loopIndexPid][3] = pressureKi * pressureintegral;
-            PidResults[loopIndexPid][4] = pressureKd * pressurederivative;
+            PidResults[loopIndexPid][4] = inputKp * error;
+            PidResults[loopIndexPid][5] = inputKi * pumpintegral;
+            PidResults[loopIndexPid][6] = inputKd * pumpderivative;
 
             // Convert to int and clamp to 0–95
-            if(ENCODER_CONTROL == 1) {
+            if(encodercontrol == 1) {
                 DimmerPower = constrain((int)DimmerPower, 0, MaxDimmerPower);
             }
-            if(ENCODER_CONTROL == 2) {
+            if(encodercontrol >= 2) {
                 DimmerPower = constrain((int)output, 0, MaxDimmerPower);
             }
         
@@ -2043,27 +2093,51 @@ void looppump() {
         }
     }
     else {
-        pressureintegral = 0;
+        pumpintegral = 0;
         previousError = 0;
-        previousRawError = 0;
+        previousMillisPumpControl = millis() - pumpControlInterval; //stops large spikes in log data
     }
 #endif
     blockMicrosDisplayStart = micros();
 }
 
+void runRecipe(int recipeIndex) {
+    if (recipeIndex < 0 || recipeIndex >= recipesCount) return;
+
+    BrewRecipe* recipe = &recipes[recipeIndex];
+    recipeName = recipe->name;
+    
+
+    LOGF(DEBUG, "Running recipe: %s\n", recipe->name);
+    for (int i = 0; i < recipe->phaseCount; ++i) {
+        BrewPhase* phase = &recipe->phases[i];
+        phaseName = phase->name;
+        LOGF(DEBUG, "Phase %d: %s for %.1f seconds", i, phase->name, phase->seconds);
+
+        // Implement phase logic here
+        // Set PID targets from phase->pressure, phase->flow, etc.
+        // Wait for phase->seconds or exit conditions
+    }
+}
+
 void looppid() {
     // Only do Wifi stuff, if Wifi is connected
     if (WiFi.status() == WL_CONNECTED && offlineMode == 0) {
-        if (FEATURE_MQTT == 1) {
+        if ((FEATURE_MQTT == 1)&&(micros() - blockMicrosDisplayStart < blockMicrosDisplayInterval)) {
             checkMQTT();
             writeSysParamsToMQTT(true); // Continue on error
 
             if (mqtt.connected() == 1) {
                 mqtt.loop();
 #if MQTT_HASSIO_SUPPORT == 1
-                hassioDiscoveryTimer();
+                //resend discovery messages if not during a main function and MQTT has been disconnected but has now reconnected
+                //this could mean mqtt_was_connected stays false for up to 5 mins, could change it to sendHASSIODiscoveryMsg();
+                if(!((machineState >= kBrew) && (machineState <= kBackflush)) && (!mqtt_was_connected)) {
+                    hassioDiscoveryTimer();
+                    mqtt_was_connected = true;
+                }
 #endif
-                mqtt_was_connected = true;
+                
             }
             // Supress debug messages until we have a connection etablished
             else if (mqtt_was_connected) {
@@ -2100,7 +2174,7 @@ void looppid() {
     testEmergencyStop(); // test if temp is too high
     bPID.Compute();      // the variable pidOutput now has new values from PID (will be written to heater pin in ISR.cpp)
 
-    if ((millis() - lastTempEvent) > tempEventInterval) {
+    if (((millis() - lastTempEvent) > tempEventInterval)&&(!mqtt_update)&&(!HASSIO_update)) {
         website_update = true;
         // send temperatures to website endpoint
         sendTempEvent(temperature, brewSetpoint, pidOutput / 10); // pidOutput is promill, so /10 to get percent value
@@ -2147,6 +2221,7 @@ void looppid() {
         previousMillisPressure = currentMillisPressure;
         inputPressure = measurePressure();
         inputPressureFilter = filterPressureValue(inputPressure);
+        pumpFlowRate = pumpRelay.getFlow(inputPressureFilter);
     }
 #endif
 
@@ -2199,13 +2274,15 @@ void looppid() {
 
     //temporary - update display if not too close to pumpPID timing
 #if OLED_DISPLAY != 0
-    if(micros() - blockMicrosDisplayStart < blockMicrosDisplayInterval) {
+    if((micros() - blockMicrosDisplayStart < blockMicrosDisplayInterval)&&(!website_update)&&(!mqtt_update)&&(!HASSIO_update)&&(standbyModeRemainingTimeDisplayOffMillis > 0)) {
         if(buffer_ready) {
             u8g2.sendBuffer();
             buffer_ready = false;
             display_update = true;
         }
-        printDisplayTimer();
+        else {
+            printDisplayTimer();
+        }
     }
 #endif
 
