@@ -23,6 +23,7 @@ public:
     //void IRAM_ATTR onTimerISR();
     void off();
     void on();
+    float getFlow(float pressure);
 
 private:
     GPIOPin& _pumpPin;
