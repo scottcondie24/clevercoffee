@@ -524,6 +524,7 @@ DiscoveryObject GenerateNumberDevice(String name, String displayName, int min_va
  * @return 0 if successful, MQTT connection error code if failed to send messages
  */
 int sendHASSIODiscoveryMsg() {
+    HASSIO_update = true;
     // Sensor, number and switch objects which will always be published
 
     DiscoveryObject machineStateDevice = GenerateSensorDevice("machineState", "Machine State", "", "enum");
@@ -591,7 +592,6 @@ int sendHASSIODiscoveryMsg() {
 
     discoveryObjects.push_back(pressure);
 #endif
-
     // Send the Objects to Hassio
     if (mqtt.connected()) {
         for (int i = 0; i < discoveryObjects.size(); i++) {
