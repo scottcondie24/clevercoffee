@@ -1893,11 +1893,13 @@ void loop() {
                 previousError = 0;
                 if(encodercontrol == 3) {//Recipes
                     preinfusion = 0;            // disable preinfusion time in s
-                    preinfusionPause = 0; // disable preinfusion pause time in s
+                    preinfusionPause = 0;       // disable preinfusion pause time in s
+                    brewTime = 0;               // disable  brewtime in s
                 }
                 else {
                     preinfusion = PRE_INFUSION_TIME;            // preinfusion time in s
                     preinfusionPause = PRE_INFUSION_PAUSE_TIME; // preinfusion pause time in s
+                    brewTime = BREW_TIME;                       // brewtime in s
                 }
             }
             LOGF(INFO, "Rotary Encoder Button down for: %lu ms", duration);
