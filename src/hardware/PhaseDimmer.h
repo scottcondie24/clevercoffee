@@ -53,6 +53,7 @@ public:
     bool getState() const;
     void off();
     void on();
+    float getFlow(float pressure);
 private:
     GPIOPin& output;
     GPIOPin& zc;

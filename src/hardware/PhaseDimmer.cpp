@@ -5,22 +5,27 @@
 #include "Arduino.h"
 
 #define pulseWidth 1
+#define ALL_DIMMERS 2
 
 static int current_dim = 0;
-static dimmerLamp* dimmer;
-static volatile uint16_t dimPower;
-static volatile uint16_t dimOutPin;
-static volatile uint16_t dimZCPin;
-static volatile uint16_t zeroCross;
-static volatile DIMMER_MODE_typedef dimMode;
-static volatile ON_OFF_typedef dimState;
-static volatile uint16_t dimCounter;
-static uint16_t dimPulseBegin;
-static volatile uint16_t togMax;
-static volatile uint16_t togMin;
-static volatile bool togDir;
+static dimmerLamp* dimmer[ALL_DIMMERS];
+static volatile uint16_t dimPower[ALL_DIMMERS];
+static volatile uint16_t dimOutPin[ALL_DIMMERS];
+static volatile uint16_t dimZCPin[ALL_DIMMERS];
+static volatile uint16_t zeroCross[ALL_DIMMERS];
+static volatile DIMMER_MODE_typedef dimMode[ALL_DIMMERS];
+static volatile ON_OFF_typedef dimState[ALL_DIMMERS];
+static volatile uint16_t dimCounter[ALL_DIMMERS];
+static uint16_t dimPulseBegin[ALL_DIMMERS];
+static volatile uint16_t togMax[ALL_DIMMERS];
+static volatile uint16_t togMin[ALL_DIMMERS];
+static volatile bool togDir[ALL_DIMMERS];
 static int toggleCounter = 0;
 static int toggleReload = 25;
+
+float PhaseFlowRate1 = 300.0; //g in 30 seconds using flush
+float PhaseFlowRate2 = 100.0; //g in 30 seconds using water switch, measured from return line
+float PhaseFlowRate2Pres = 9.5; //Bars that OPV is set to
 
 static const uint16_t powerBuf[] = {
     100, 99, 98, 97, 96, 95, 94, 93, 92, 91,
@@ -37,30 +42,34 @@ static const uint16_t powerBuf[] = {
 
 void IRAM_ATTR isr_ext()
 {
-    if (dimState == ON) {
-        zeroCross = 1;
+    for (int i = 0; i < current_dim; i++) {
+        if (dimState[i] == ON) {
+            zeroCross[i] = 1;
+        }
     }
 }
 
 void IRAM_ATTR onTimerISR()
 {
     toggleCounter++;
-    if (zeroCross) {
-        dimCounter++;
-        if (dimMode == TOGGLE_MODE) {
-            if (dimPulseBegin >= togMax) togDir = false;
-            if (dimPulseBegin <= togMin) togDir = true;
-            if (toggleCounter == toggleReload) {
-                dimPulseBegin += (togDir ? 1 : -1);
+    for (int k = 0; k < current_dim; k++) {
+        if (zeroCross) {
+            dimCounter[k]++;
+            if (dimMode[k] == TOGGLE_MODE) {
+                if (dimPulseBegin[k] >= togMax[k]) togDir[k] = false;
+                if (dimPulseBegin[k] <= togMin[k]) togDir[k] = true;
+                if (toggleCounter == toggleReload) {
+                    dimPulseBegin[k] += (togDir[k] ? 1 : -1);
+                }
             }
-        }
-        if (dimCounter >= dimPulseBegin) {
-            digitalWrite(dimOutPin, HIGH);
-        }
-        if (dimCounter >= dimPulseBegin + pulseWidth) {
-            digitalWrite(dimOutPin, LOW);
-            zeroCross = 0;
-            dimCounter = 0;
+            if (dimCounter[k] >= dimPulseBegin[k]) {
+                digitalWrite(dimOutPin[k], HIGH);
+            }
+            if (dimCounter[k] >= dimPulseBegin[k] + pulseWidth) {
+                digitalWrite(dimOutPin[k], LOW);
+                zeroCross[k] = 0;
+                dimCounter[k] = 0;
+            }
         }
     }
     if (toggleCounter >= toggleReload) toggleCounter = 1;
@@ -72,16 +81,16 @@ dimmerLamp::dimmerLamp(int user_dimmer_pin, int zc_dimmer_pin, int timer_num)
 {
     current_dim++;
     current_num = current_dim - 1;
-    dimmer = this;
+    dimmer[current_num] = this;
 
-    dimOutPin = user_dimmer_pin;
-    dimZCPin = zc_dimmer_pin;
-    dimCounter = 0;
-    zeroCross = 0;
-    dimPulseBegin = 1;
-    dimMode = NORMAL_MODE;
-    togMin = 0;
-    togMax = 1;
+    dimOutPin[current_num] = user_dimmer_pin;
+    dimZCPin[current_num] = zc_dimmer_pin;
+    dimCounter[current_num] = 0;
+    zeroCross[current_num] = 0;
+    dimPulseBegin[current_num] = 1;
+    dimMode[current_num] = NORMAL_MODE;
+    togMin[current_num] = 0;
+    togMax[current_num] = 1;
     toggle_state = false;
 
     pinMode(user_dimmer_pin, OUTPUT);
@@ -103,8 +112,8 @@ void dimmerLamp::ext_int_init()
 
 void dimmerLamp::begin(DIMMER_MODE_typedef mode, ON_OFF_typedef state)
 {
-    dimMode = mode;
-    dimState = state;
+    dimMode[current_num] = mode;
+    dimState[current_num] = state;
     timer_init();
     ext_int_init();
 }
@@ -112,42 +121,42 @@ void dimmerLamp::begin(DIMMER_MODE_typedef mode, ON_OFF_typedef state)
 void dimmerLamp::setPower(int power)
 {
     if (power >= 99) power = 99;
-    dimPower = power;
-    dimPulseBegin = powerBuf[power];
+    dimPower[current_num] = power;
+    dimPulseBegin[current_num] = powerBuf[power];
     //delay(1);
 }
 
 int dimmerLamp::getPower() {
-    return (dimState == ON) ? dimPower : 0;
+    return (dimState[current_num] == ON) ? dimPower[current_num] : 0;
 }
 
 void dimmerLamp::setState(ON_OFF_typedef state) {
-    dimState = state;
+    dimState[current_num] = state;
 }
 
 bool dimmerLamp::getState() {
-    return dimState == ON;
+    return dimState[current_num] == ON;
 }
 
 void dimmerLamp::changeState() {
-    dimState = (dimState == ON) ? OFF : ON;
+    dimState[current_num] = (dimState[current_num] == ON) ? OFF : ON;
 }
 
 DIMMER_MODE_typedef dimmerLamp::getMode() {
-    return dimMode;
+    return dimMode[current_num];
 }
 
 void dimmerLamp::setMode(DIMMER_MODE_typedef mode) {
-    dimMode = mode;
+    dimMode[current_num] = mode;
 }
 
 void dimmerLamp::toggleSettings(int minValue, int maxValue)
 {
     maxValue = min(maxValue, 99);
     minValue = max(minValue, 1);
-    dimMode = TOGGLE_MODE;
-    togMin = powerBuf[maxValue];
-    togMax = powerBuf[maxValue];
+    dimMode[current_num] = TOGGLE_MODE;
+    togMin[current_num] = powerBuf[maxValue];
+    togMax[current_num] = powerBuf[maxValue];
     toggleReload = 50;
 }
 
@@ -184,6 +193,15 @@ void Dimmer::off() {
 void Dimmer::on() {
     dimmer.setState(ON);
     currentState = true;
+}
+
+float Dimmer::getFlow(float pressure) {
+    //this is unfinished
+    float powerMultiplier = float(getPower())*2 - 100;  //only use 50% to 100% and map it 0 to 100
+    powerMultiplier  = constrain(powerMultiplier, 0, 100)/100; //convert to 0-1
+    //simple linear interplolation
+    float flowRate = powerMultiplier*(((PhaseFlowRate2 - PhaseFlowRate1)/PhaseFlowRate2Pres)*pressure + PhaseFlowRate1)/30; // result in g/s
+    return flowRate;
 }
 
 #endif
