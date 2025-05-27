@@ -154,17 +154,34 @@ void printScreen() {
 #endif
 
 #if (FEATURE_PRESSURESENSOR == 1) || (FEATURE_PRESSURESENSOR == 2)
+    u8g2.setFont(u8g2_font_profont10_tf);
     u8g2.setCursor(32, 46);
     u8g2.print("P:");
     u8g2.print(inputPressure, 2);
     u8g2.print(" ");
     u8g2.print(DimmerPower,0);
-    u8g2.print(" ");
-    u8g2.print(setPressure,1);
+    if(encodercontrol == 1) u8g2.print(" Power");
+    if(encodercontrol == 2) u8g2.print(" Pressure");
+    if(encodercontrol == 3) u8g2.print(" Recipe");
+    if(encodercontrol == 4) u8g2.print(" Flow");
+    if(encodercontrol == 5) u8g2.print(" Kp");
+    if(encodercontrol == 6) u8g2.print(" Ki");
+    if(encodercontrol == 7) u8g2.print(" Kd");
+    u8g2.setCursor(32, 55);
+    u8g2.print(pumpFlowRate,1);
+    u8g2.print(" mL/s ");
+    if(encodercontrol == 2) u8g2.print(setPressure,1);
+    if(encodercontrol == 3) displayScrollingSubstring(80, 55, 30, recipeName, false);  // true = bounce, false = wrap
+    if(encodercontrol == 4) u8g2.print(setPumpFlowRate,1);
+    if(encodercontrol == 5) u8g2.print(flowKp,1);  
+    if(encodercontrol == 6) u8g2.print(flowKi,1);  
+    if(encodercontrol == 7) u8g2.print(flowKd,2);  
+    u8g2.setFont(u8g2_font_profont11_tf);
+
 #endif
 
     // Show heater output in %
-    displayProgressbar(pidOutput / 10, 30, 60, 98);
+//    displayProgressbar(pidOutput / 10, 30, 60, 98);
 
     buffer_ready = true;
     //u8g2.sendBuffer();
