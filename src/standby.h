@@ -6,7 +6,7 @@
 
 #pragma once
 
-#define TIME_TO_DISPLAY_OFF 10
+#define TIME_TO_DISPLAY_OFF 5
 
 unsigned long standbyModeStartTimeMillis = millis();
 unsigned long standbyModeRemainingTimeMillis = standbyModeTime * 60 * 1000;
