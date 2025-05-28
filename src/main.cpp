@@ -112,6 +112,12 @@ enum MachineState {
     kEepromError = 110,
 };
 
+enum PumpControl {
+    POWER = 1,
+    PRESSURE = 2,
+    FLOW = 4,
+};
+
 MachineState machineState = kInit;
 MachineState lastmachinestate = kInit;
 MachineState lastmachinestatedebug = kInit;
@@ -150,8 +156,12 @@ const char* OTApass = OTAPASS;
 // Profiles
 #include "brewProfiles.h"
 int currentRecipeIndex = 0;
-const char*  recipeName;
-const char*  phaseName;
+int currentPhaseIndex = 0;
+float phaseTiming = 0;
+bool debug_recipe = false;
+const char*  recipeName = recipes[currentRecipeIndex].name;
+const char*  phaseName = "infuse";
+
 
 //Pressure Sensor
 #if (FEATURE_PRESSURESENSOR == 1)
@@ -299,6 +309,7 @@ bool encoderSwPressed = false;
 int encodercontrol = ENCODER_CONTROL;
 
 //Pump
+PumpControl pumpControl = PRESSURE;
 float inputPressure = 0;
 float pumpFlowRate = 0;
 volatile float setPressure = 9.0;
@@ -1815,7 +1826,9 @@ void knobCallback(long value){
         tempvalue = (value-lastencodervalue); 
         tempvalue = currentRecipeIndex + tempvalue;
         currentRecipeIndex = constrain(tempvalue, 0.0, recipesCount - 1);    //0-recipesCount
+        currentPhaseIndex = 0;
         recipeName = recipes[currentRecipeIndex].name;
+
         LOGF(INFO, "Recipe Index: %i -- Recipe Name: %s", currentRecipeIndex, recipeName);
     }
     else if(encodercontrol == 4) {
@@ -1892,9 +1905,9 @@ void loop() {
                 pumpintegral = 0;
                 previousError = 0;
                 if(encodercontrol == 3) {//Recipes
+                    recipeName = recipes[currentRecipeIndex].name;
                     preinfusion = 0;            // disable preinfusion time in s
                     preinfusionPause = 0;       // disable preinfusion pause time in s
-                    brewTime = 0;               // disable  brewtime in s
                 }
                 else {
                     preinfusion = PRE_INFUSION_TIME;            // preinfusion time in s
@@ -1962,9 +1975,6 @@ void loop() {
             if((maxActivity > 10)||(maxloop > 40000)){
                 printLoopTimingsAsList();
                 printActivityTimingsAsList();
-
-                LOGF(DEBUG, "There are %d recipes", recipesCount);
-                runRecipe(currentRecipeIndex);
             }
 
             // Reset trackers
@@ -2023,6 +2033,10 @@ void printLoopPidAsList() {
 }
 
 void looppump() {
+    if(machineState != kBrew) { //moved here from recipes
+        debug_recipe = false;
+        currentPhaseIndex = 0;
+    }
 #if (FEATURE_PUMP_DIMMER > 0) 
     static float inputPID = 0.0;
     static float targetPID = 0.0;                
@@ -2040,15 +2054,28 @@ void looppump() {
             PidResults[loopIndexPid][2] = pumpFlowRate;
             PidResults[loopIndexPid][3] = setPumpFlowRate;
 
-            if((encodercontrol == 2) || (encodercontrol == 3)) {   //pressure   and temporary recipes
+            if(encodercontrol == 1) {   //power
+                pumpControl = POWER;
+            }
+            if(encodercontrol == 2) {   //pressure
+                pumpControl = PRESSURE;
+            }
+            if(encodercontrol == 3) {   //recipes
+                runRecipe(currentRecipeIndex);
+            }
+            else if(encodercontrol >= 4) { //flow and PID tuning
+                pumpControl = FLOW;
+            }
+
+
+            if(pumpControl == PRESSURE) {   //pressure   and temporary recipes
                 inputPID = inputPressureFilter;//inputPressure;
                 targetPID = setPressure;
                 inputKp = pumpKp;
                 inputKi = pumpKi;
                 inputKd = pumpKd;
             }
-
-            else if (encodercontrol >= 4) { //flow and PID tuning
+            else if (pumpControl == FLOW) { //flow and PID tuning
                 inputPID = pumpFlowRate;
                 targetPID = setPumpFlowRate;
                 inputKp = flowKp;
@@ -2062,32 +2089,31 @@ void looppump() {
                 inputKi = 0.0;
                 inputKd = 0.0;
             }
-            
-            float error = targetPID - inputPID;
-            pumpintegral += error * pumpdt; // Integrate error
-            pumpintegral = constrain(pumpintegral, -integralAntiWindup, integralAntiWindup);
-            float pumpderivative = (error - previousError) / pumpdt;
-            previousError = error;
-            //PID output
-            float output = (inputKp * error) + (inputKi * pumpintegral) + (inputKd * pumpderivative);
-            
-            PidResults[loopIndexPid][4] = inputKp * error;
-            PidResults[loopIndexPid][5] = inputKi * pumpintegral;
-            PidResults[loopIndexPid][6] = inputKd * pumpderivative;
 
-            // Convert to int and clamp to 0–95
-            if(encodercontrol == 1) {
+            if(pumpControl == POWER) {
                 DimmerPower = constrain((int)DimmerPower, 0, MaxDimmerPower);
             }
-            if(encodercontrol >= 2) {
+            else {
+                float error = targetPID - inputPID;
+                pumpintegral += error * pumpdt; // Integrate error
+                pumpintegral = constrain(pumpintegral, -integralAntiWindup, integralAntiWindup);
+                float pumpderivative = (error - previousError) / pumpdt;
+                previousError = error;
+                //PID output
+                float output = (inputKp * error) + (inputKi * pumpintegral) + (inputKd * pumpderivative);
+                
+                PidResults[loopIndexPid][4] = inputKp * error;
+                PidResults[loopIndexPid][5] = inputKi * pumpintegral;
+                PidResults[loopIndexPid][6] = inputKd * pumpderivative;
+
                 DimmerPower = constrain((int)output, 0, MaxDimmerPower);
             }
-        
             // Only update if power changed
             if (pumpRelay.getPower() != DimmerPower) {
                 pumpRelay.setPower(DimmerPower);
             }
 
+            //DEBUGGING
             if (inputPressure > maxpressure) {
                 maxpressure = inputPressure;
             }
@@ -2102,31 +2128,126 @@ void looppump() {
             }
         }
     }
-    else {
+    else {  //Pump turned off
         pumpintegral = 0;
         previousError = 0;
         previousMillisPumpControl = millis() - pumpControlInterval; //stops large spikes in log data
     }
 #endif
-    blockMicrosDisplayStart = micros();
+    blockMicrosDisplayStart = micros(); //give other functions like display and MQTT some time to refresh
 }
 
 void runRecipe(int recipeIndex) {
     if (recipeIndex < 0 || recipeIndex >= recipesCount) return;
+    
+    static float lastPressure = 0.0;
+    static float lastFlow = 0.0;
 
     BrewRecipe* recipe = &recipes[recipeIndex];
-    recipeName = recipe->name;
-    
+    BrewPhase* phase = &recipe->phases[currentPhaseIndex];
 
-    LOGF(DEBUG, "Running recipe: %s\n", recipe->name);
-    for (int i = 0; i < recipe->phaseCount; ++i) {
-        BrewPhase* phase = &recipe->phases[i];
+    if(currentPhaseIndex < recipe->phaseCount) {
         phaseName = phase->name;
-        LOGF(DEBUG, "Phase %d: %s for %.1f seconds", i, phase->name, phase->seconds);
+    }
+    else {
+        return;
+    }
 
-        // Implement phase logic here
-        // Set PID targets from phase->pressure, phase->flow, etc.
-        // Wait for phase->seconds or exit conditions
+    if (debug_recipe == false) {
+        debug_recipe = true;
+        brewTime = 1000;               // disable  brewtime in s
+        lastPressure = 0.0;
+        lastFlow = 0.0;
+        phaseTiming = 0;
+        LOGF(DEBUG, "Running recipe: %s\n", recipe->name);
+        LOGF(DEBUG, "Phase %d: %s for %.1f seconds", currentPhaseIndex, phase->name, phase->seconds);
+    }
+
+
+    // Transition to next phase if exit condition met
+    bool exitReached = false;
+
+    switch (phase->exit_type) {
+        case EXIT_TYPE_NONE:
+            exitReached = (timeBrewed > (phase->seconds)*1000 + phaseTiming);
+            break;
+
+        case EXIT_TYPE_PRESSURE_OVER:
+            exitReached = (inputPressureFilter >= phase->exit_pressure_over);
+            break;
+
+        case EXIT_TYPE_PRESSURE_UNDER:
+            exitReached = (inputPressureFilter <= phase->exit_pressure_under);
+            break;
+
+        case EXIT_TYPE_FLOW_OVER:
+            exitReached = (pumpFlowRate >= phase->exit_flow_over);
+            break;
+
+        case EXIT_TYPE_FLOW_UNDER:
+            exitReached = (pumpFlowRate <= phase->exit_flow_under);
+            break;
+    }
+    if (phase->weight > 0 && weightBrewed >= phase->weight) {
+        exitReached = true;
+    }
+
+    if (exitReached || (timeBrewed > (phase->seconds)*1000 + phaseTiming)) {
+        lastPressure = phase->pressure;
+        lastFlow = phase->flow;
+        currentPhaseIndex += 1;
+        if (currentPhaseIndex < recipe->phaseCount) {
+            phase = &recipe->phases[currentPhaseIndex];
+            LOGF(DEBUG, "Phase %d: %s for %.1f seconds", currentPhaseIndex, phase->name, phase->seconds);
+            phaseTiming = timeBrewed;
+        } 
+        else {
+            LOG(DEBUG, "Brew recipe complete");
+            brewTime = timeBrewed/1000;
+        }
+    }
+
+    // Control logic based on phase settings
+
+    //check if still in phases, otherwise skip control
+    if(currentPhaseIndex < recipe->phaseCount) {
+        if (phase->pump == "flow") {
+            pumpControl = FLOW;
+            if (phase->transition == TRANSITION_SMOOTH) {
+                float elapsed = (millis() - phaseTiming) / 1000.0;
+                float t = elapsed / phase->seconds;
+                if (t > 1.0) t = 1.0;
+                setPumpFlowRate = lastFlow + (phase->flow - lastFlow) * t;
+            } 
+            else {
+                setPumpFlowRate = phase->flow;
+            }
+        }
+        else if (phase->pump == "pressure") {
+            pumpControl = PRESSURE;
+            if (phase->transition == TRANSITION_SMOOTH) {
+                float elapsed = (millis() - phaseTiming) / 1000.0;
+                float t = elapsed / phase->seconds;
+                if (t > 1.0) t = 1.0;
+                setPressure = lastPressure + (phase->pressure - lastPressure) * t;
+            } 
+            else {
+                setPressure = phase->pressure;
+            }
+        }
+            // otherwise run old settings for next phase
+
+
+        else {  //shouldnt ever get here
+            if(phase->pressure > 0) {
+                pumpControl = PRESSURE;
+                setPressure = phase->pressure;
+            }
+            else {
+                pumpControl = FLOW;
+                setPumpFlowRate = phase->flow;
+            }
+        }
     }
 }
 
