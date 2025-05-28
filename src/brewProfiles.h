@@ -8,6 +8,12 @@ typedef enum {
     EXIT_TYPE_PRESSURE_OVER = 4,
 } ExitType;
 
+typedef enum {
+    TRANSITION_NONE,
+    TRANSITION_SMOOTH,
+    TRANSITION_FAST
+} TransitionType;
+
 typedef struct {
     const char* name;
     float pressure, flow, volume, temperature, weight;
@@ -16,6 +22,8 @@ typedef struct {
     float max_flow_or_pressure, max_flow_or_pressure_range;
     float seconds;
     ExitType exit_type;
+    TransitionType transition;
+    const char* pump;
 } BrewPhase;
 
 typedef struct {
