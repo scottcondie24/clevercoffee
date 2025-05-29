@@ -2187,8 +2187,8 @@ void runRecipe(int recipeIndex) {
     }
 
     if (exitReached || (timeBrewed > (phase->seconds)*1000 + phaseTiming)) {
-        lastPressure = phase->pressure;
-        lastFlow = phase->flow;
+        lastPressure = inputPressureFilter;//phase->pressure;
+        lastFlow = pumpFlowRate;//phase->flow;
         currentPhaseIndex += 1;
         if (currentPhaseIndex < recipe->phaseCount) {
             phase = &recipe->phases[currentPhaseIndex];
@@ -2216,6 +2216,7 @@ void runRecipe(int recipeIndex) {
             else {
                 setPumpFlowRate = phase->flow;
             }
+            setPressure = 0;
         }
         else if (phase->pump == PRESSURE) {
             pumpControl = PRESSURE;
@@ -2228,6 +2229,7 @@ void runRecipe(int recipeIndex) {
             else {
                 setPressure = phase->pressure;
             }
+            setPumpFlowRate = 0;
         }
             // otherwise run old settings for next phase
 
@@ -2236,10 +2238,12 @@ void runRecipe(int recipeIndex) {
             if(phase->pressure > 0) {
                 pumpControl = PRESSURE;
                 setPressure = phase->pressure;
+                setPumpFlowRate = 0;
             }
             else {
                 pumpControl = FLOW;
                 setPumpFlowRate = phase->flow;
+                setPressure = 0;
             }
         }
     }
@@ -2250,14 +2254,16 @@ void looppid() {
     if (WiFi.status() == WL_CONNECTED && offlineMode == 0) {
         if ((FEATURE_MQTT == 1)&&(micros() - blockMicrosDisplayStart < blockMicrosDisplayInterval)) {
             checkMQTT();
-            writeSysParamsToMQTT(true); // Continue on error
+            if(!buffer_ready) {
+                writeSysParamsToMQTT(true); // Continue on error
+            }
 
             if (mqtt.connected() == 1) {
                 mqtt.loop();
 #if MQTT_HASSIO_SUPPORT == 1
                 //resend discovery messages if not during a main function and MQTT has been disconnected but has now reconnected
                 //this could mean mqtt_was_connected stays false for up to 5 mins, could change it to sendHASSIODiscoveryMsg();
-                if(!((machineState >= kBrew) && (machineState <= kBackflush)) && (!mqtt_was_connected)) {
+                if(!((machineState >= kBrew) && (machineState <= kBackflush)) && (!mqtt_was_connected) && (!buffer_ready)) {
                     hassioDiscoveryTimer();
                     mqtt_was_connected = true;
                 }
@@ -2299,7 +2305,7 @@ void looppid() {
     testEmergencyStop(); // test if temp is too high
     bPID.Compute();      // the variable pidOutput now has new values from PID (will be written to heater pin in ISR.cpp)
 
-    if (((millis() - lastTempEvent) > tempEventInterval)&&(!mqtt_update)&&(!HASSIO_update)) {
+    if (((millis() - lastTempEvent) > tempEventInterval)&&(!mqtt_update)&&(!HASSIO_update)&&(!buffer_ready)) {
         website_update = true;
         // send temperatures to website endpoint
         sendTempEvent(temperature, brewSetpoint, pidOutput / 10); // pidOutput is promill, so /10 to get percent value
