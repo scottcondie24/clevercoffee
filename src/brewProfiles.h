@@ -11,8 +11,16 @@ typedef enum {
 typedef enum {
     TRANSITION_NONE,
     TRANSITION_SMOOTH,
-    TRANSITION_FAST
+    TRANSITION_FAST,
 } TransitionType;
+
+
+typedef enum {
+    NONE = 0,
+    POWER = 1,
+    PRESSURE = 2,
+    FLOW = 4,
+} PumpControl;
 
 typedef struct {
     const char* name;
@@ -23,7 +31,7 @@ typedef struct {
     float seconds;
     ExitType exit_type;
     TransitionType transition;
-    const char* pump;
+    PumpControl pump;
 } BrewPhase;
 
 typedef struct {
