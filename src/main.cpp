@@ -112,12 +112,6 @@ enum MachineState {
     kEepromError = 110,
 };
 
-enum PumpControl {
-    POWER = 1,
-    PRESSURE = 2,
-    FLOW = 4,
-};
-
 MachineState machineState = kInit;
 MachineState lastmachinestate = kInit;
 MachineState lastmachinestatedebug = kInit;
@@ -314,7 +308,7 @@ float inputPressure = 0;
 float pumpFlowRate = 0;
 volatile float setPressure = 9.0;
 volatile float setPumpFlowRate = 6.0;
-volatile float flowKp = 9.0;
+volatile float flowKp = 8.0;    //9.0
 volatile float flowKi = 30.0;
 volatile float flowKd = 0.0;
 volatile int DimmerPower = 95;
@@ -2211,10 +2205,10 @@ void runRecipe(int recipeIndex) {
 
     //check if still in phases, otherwise skip control
     if(currentPhaseIndex < recipe->phaseCount) {
-        if (phase->pump == "flow") {
+        if (phase->pump == FLOW) {
             pumpControl = FLOW;
             if (phase->transition == TRANSITION_SMOOTH) {
-                float elapsed = (millis() - phaseTiming) / 1000.0;
+                float elapsed = (timeBrewed - phaseTiming) / 1000.0;
                 float t = elapsed / phase->seconds;
                 if (t > 1.0) t = 1.0;
                 setPumpFlowRate = lastFlow + (phase->flow - lastFlow) * t;
@@ -2223,10 +2217,10 @@ void runRecipe(int recipeIndex) {
                 setPumpFlowRate = phase->flow;
             }
         }
-        else if (phase->pump == "pressure") {
+        else if (phase->pump == PRESSURE) {
             pumpControl = PRESSURE;
             if (phase->transition == TRANSITION_SMOOTH) {
-                float elapsed = (millis() - phaseTiming) / 1000.0;
+                float elapsed = (timeBrewed - phaseTiming) / 1000.0;
                 float t = elapsed / phase->seconds;
                 if (t > 1.0) t = 1.0;
                 setPressure = lastPressure + (phase->pressure - lastPressure) * t;
