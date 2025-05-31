@@ -70,12 +70,8 @@ hw_timer_t* timer = NULL;
 #include <Wire.h>
 #endif
 
-#if (FEATURE_PUMP_DIMMER == 1)
-#include "hardware/PSMDimmer.h"
-#endif
-
-#if (FEATURE_PUMP_DIMMER == 2)
-#include "hardware/PhaseDimmer.h"
+#if (FEATURE_PUMP_DIMMER > 0)
+#include "hardware/Dimmers.h"
 #endif
 
 #if OLED_DISPLAY == 3
@@ -191,11 +187,10 @@ GPIOPin pumpZCPin(PIN_ZC, GPIOPin::IN_HARDWARE);
 #if (FEATURE_PUMP_DIMMER == 0)
     Relay pumpRelay(pumpRelayPin, PUMP_WATER_SSR_TYPE);
 #endif
-#if (FEATURE_PUMP_DIMMER == 1)
-    PSMDimmer pumpRelay(pumpRelayPin, pumpZCPin);
-#endif
-#if (FEATURE_PUMP_DIMMER == 2)
-    Dimmer pumpRelay(pumpRelayPin, pumpZCPin, 1);
+
+#if (FEATURE_PUMP_DIMMER > 0)
+    PumpDimmerCore pumpRelay(pumpRelayPin, pumpZCPin, 1);
+    const char* controlMethodToString(PumpDimmerCore::ControlMethod method);
 #endif
 
 GPIOPin valveRelayPin(PIN_VALVE, GPIOPin::OUT);
@@ -302,12 +297,17 @@ unsigned long EncoderSwitchControlInterval = 1000;
 bool encoderSwPressed = false;
 int encodercontrol = ENCODER_CONTROL;
 
-//Pump
+//Pump  //these shouldnt need to be volatile as no interrupts
 PumpControl pumpControl = PRESSURE;
 float inputPressure = 0;
 float pumpFlowRate = 0;
 volatile float setPressure = 9.0;
 volatile float setPumpFlowRate = 6.0;
+volatile float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
+volatile float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
+volatile float pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+volatile float integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pressureKi
+volatile int MaxDimmerPower = 100;
 volatile float flowKp = 8.0;    //9.0
 volatile float flowKi = 30.0;
 volatile float flowKd = 0.0;
@@ -315,22 +315,8 @@ volatile int DimmerPower = 95;
 unsigned long currentMillisPumpControl = 0;
 unsigned long previousMillisPumpControl = 0;
 unsigned long pumpControlInterval = 50;
+int featurePumpDimmer = FEATURE_PUMP_DIMMER;
 
-// --- PID control variables ---
-#if FEATURE_PUMP_DIMMER == 1
-    const float pumpKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
-    const float pumpKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
-    const float pumpKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
-    const float integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pumpKi
-    int MaxDimmerPower = 100;
-#endif
-#if FEATURE_PUMP_DIMMER == 2
-    const float pumpKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
-    const float pumpKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
-    const float pumpKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
-    const float integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pumpKi
-    int MaxDimmerPower = 95;
-#endif
 unsigned long blockMicrosDisplayInterval = 20000;
 unsigned long blockMicrosDisplayStart = 0;
 static float pumpintegral = 0.0;
@@ -1644,9 +1630,16 @@ void setup() {
     storageSetup();
 
     
-#if (FEATURE_PUMP_DIMMER > 0)
+#if (FEATURE_PUMP_DIMMER == 1)
     pumpRelay.begin();
-    pumpRelay.setPower(DimmerPower);
+    pumpRelay.setControlMethod(PumpDimmerCore::ControlMethod::PSM);
+    pumpRelay.setPower(0); // start off with zero power
+#endif
+
+#if (FEATURE_PUMP_DIMMER == 2)
+    pumpRelay.begin();
+    pumpRelay.setControlMethod(PumpDimmerCore::ControlMethod::PHASE);
+    pumpRelay.setPower(0);
 #endif
 
     heaterRelay.off();
@@ -1781,7 +1774,7 @@ void setup() {
         rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
         rotaryEncoder.setBoundaries(0,100,true);
         rotaryEncoder.onTurned( &knobCallback );
-        rotaryEncoder.onPressed( &buttonCallback );
+        //rotaryEncoder.onPressed( &buttonCallback );
         rotaryEncoder.begin();
     }
     encoderSw = new IOSwitch(PIN_ROTARY_SW, GPIOPin::IN_PULLUP, Switch::TOGGLE, Switch::NORMALLY_CLOSED);
@@ -1845,6 +1838,11 @@ void knobCallback(long value){
         tempvalue = flowKd + tempvalue;
         flowKd = constrain(tempvalue, 0.0, 4.0);    //0-4
     }
+    else if(encodercontrol == 8) {
+        tempvalue = (value-lastencodervalue); 
+        tempvalue = featurePumpDimmer + tempvalue;
+        featurePumpDimmer = constrain(tempvalue, 1, 2);    //1-2
+    }
     lastencodervalue = value;
 }
 void buttonCallback(unsigned long duration){
@@ -1892,7 +1890,7 @@ void loop() {
             }
             else if(duration > EncoderSwitchControlInterval) {   //toggle every interval
                 encodercontrol += 1;
-                if(encodercontrol > 7) {
+                if(encodercontrol > 8) {
                     encodercontrol = 1;
                 }
                 LOGF(INFO, "Rotary Encoder Mode Changed: %i", encodercontrol);
@@ -2037,6 +2035,24 @@ void looppump() {
     static float inputKp = 0.0;
     static float inputKi = 0.0;
     static float inputKd = 0.0;
+
+
+    // --- PID control variables ---
+    /*if(featurePumpDimmer == 1) {
+        pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
+        pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
+        pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+        integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pumpKi
+        MaxDimmerPower = 100;
+    }
+    if(featurePumpDimmer == 2) {
+        pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
+        pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
+        pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
+        integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pumpKi
+        MaxDimmerPower = 100;
+    }*/
+
     if(pumpRelay.getState()) {
         currentMillisPumpControl = millis();
         if (currentMillisPumpControl - previousMillisPumpControl >= pumpControlInterval) {
@@ -2065,9 +2081,9 @@ void looppump() {
             if(pumpControl == PRESSURE) {   //pressure   and temporary recipes
                 inputPID = inputPressureFilter;//inputPressure;
                 targetPID = setPressure;
-                inputKp = pumpKp;
-                inputKi = pumpKi;
-                inputKd = pumpKd;
+                inputKp = pressureKp;
+                inputKi = pressureKi;
+                inputKd = pressureKd;
             }
             else if (pumpControl == FLOW) { //flow and PID tuning
                 inputPID = pumpFlowRate;
@@ -2126,6 +2142,8 @@ void looppump() {
         pumpintegral = 0;
         previousError = 0;
         previousMillisPumpControl = millis() - pumpControlInterval; //stops large spikes in log data
+        PumpDimmerCore::ControlMethod method = (featurePumpDimmer == 2) ? PumpDimmerCore::ControlMethod::PHASE : PumpDimmerCore::ControlMethod::PSM;
+        pumpRelay.setControlMethod(method);
     }
 #endif
     blockMicrosDisplayStart = micros(); //give other functions like display and MQTT some time to refresh

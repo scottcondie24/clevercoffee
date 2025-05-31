@@ -3,6 +3,8 @@
  *
  * @brief Controls TRIAC Dimmer by altering the on timing of each cycle
  */
+
+ /*
 #pragma once
 
 #include "GPIOPin.h"
@@ -61,3 +63,4 @@ private:
     int currentPower;
     bool currentState;
 };
+*/

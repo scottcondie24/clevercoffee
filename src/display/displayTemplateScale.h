@@ -182,6 +182,7 @@ void printScreen() {
     if(encodercontrol == 5) u8g2.print(" Kp");
     if(encodercontrol == 6) u8g2.print(" Ki");
     if(encodercontrol == 7) u8g2.print(" Kd");
+    if(encodercontrol == 8) u8g2.print(" DimMethod");
     u8g2.setCursor(32, 55);
     u8g2.print(pumpFlowRate,1);
     u8g2.print(" mL/s ");
@@ -198,6 +199,12 @@ void printScreen() {
     if(encodercontrol == 5) u8g2.print(flowKp,1);  
     if(encodercontrol == 6) u8g2.print(flowKi,1);  
     if(encodercontrol == 7) u8g2.print(flowKd,2);  
+#if (FEATURE_PUMP_DIMMER > 0)
+    if (encodercontrol == 8) {
+        PumpDimmerCore::ControlMethod method = pumpRelay.getControlMethod();
+        u8g2.print(controlMethodToString(method));
+    }
+#endif
     u8g2.setFont(u8g2_font_profont11_tf);
 
 #endif

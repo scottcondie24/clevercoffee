@@ -3,6 +3,8 @@
  *
  * @brief Controls TRIAC Dimmer by skipping cycles
  */
+
+/*
 #pragma once
 
 #include <Arduino.h>
@@ -36,4 +38,4 @@ private:
     //static void IRAM_ATTR onZeroCrossISRStatic();
     //static void IRAM_ATTR onTimerISRStatic();
     bool currentState;
-};
+};*/
