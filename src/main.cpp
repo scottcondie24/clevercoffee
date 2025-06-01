@@ -151,6 +151,9 @@ float phaseTiming = 0;
 bool debug_recipe = false;
 const char*  recipeName = recipes[currentRecipeIndex].name;
 const char*  phaseName = "infuse";
+double lastPreinfusion = PRE_INFUSION_TIME;
+double lastPreinfusionPause = PRE_INFUSION_PAUSE_TIME;
+double lastBrewTime = BREW_TIME;
 
 
 //Pressure Sensor
@@ -273,12 +276,12 @@ unsigned long maxloop = 0;
 unsigned long maxActivity = 0;
 float maxpressure = 0;
 const int LOOP_HISTORY_SIZE = 20;
-const int TYPE_HISTORY_SIZE = 8;
+const int TYPE_HISTORY_SIZE = 9;
 unsigned long loopTimings[LOOP_HISTORY_SIZE];
 unsigned long maxLoopTimings[LOOP_HISTORY_SIZE];
 unsigned int activityLoopTimings[LOOP_HISTORY_SIZE];
 unsigned int maxActivityLoopTimings[LOOP_HISTORY_SIZE];
-float PidResults[LOOP_HISTORY_SIZE][TYPE_HISTORY_SIZE]; //Output, Target, Flow, FlowTarget, P, I, D, Timing
+float PidResults[LOOP_HISTORY_SIZE][TYPE_HISTORY_SIZE]; //Output, Target, Flow, FlowTarget, brewWeight, P, I, D, Timing
 int loopIndex = 0;
 int loopIndexPid = 0;
 bool triggered = false;
@@ -758,6 +761,10 @@ void handleMachineState() {
             if (tempSensor->hasError()) {
                 machineState = kSensorError;
             }
+
+            if (machineState != kBrew) {
+                MQTTReCnctCount = 0;    //allow MQTT to try to reconnect if exiting brew mode
+            }
             break;
 
         case kManualFlush:
@@ -958,6 +965,9 @@ void handleMachineState() {
                 u8g2.setPowerSave(0);
 #endif
                 machineState = kSensorError;
+            }
+            if (machineState != kStandby) {
+                MQTTReCnctCount = 0;    //allow MQTT to try to reconnect if exiting standby, maybe just make this every 10mins or so not exiting standby
             }
             break;
 
@@ -1759,7 +1769,6 @@ void setup() {
     previousMillistemp = currentTime;
     windowStartTime = currentTime;
     previousMillisMQTT = currentTime;
-    lastMQTTConnectionAttempt = currentTime;
 
 #if FEATURE_SCALE == 1
     previousMillisScale = currentTime;
@@ -1898,13 +1907,16 @@ void loop() {
                 previousError = 0;
                 if(encodercontrol == 3) {//Recipes
                     recipeName = recipes[currentRecipeIndex].name;
+                    lastPreinfusion = preinfusion;
+                    lastPreinfusionPause = preinfusionPause;
+                    lastBrewTime = brewTime;
                     preinfusion = 0;            // disable preinfusion time in s
                     preinfusionPause = 0;       // disable preinfusion pause time in s
                 }
                 else {
-                    preinfusion = PRE_INFUSION_TIME;            // preinfusion time in s
-                    preinfusionPause = PRE_INFUSION_PAUSE_TIME; // preinfusion pause time in s
-                    brewTime = BREW_TIME;                       // brewtime in s
+                    preinfusion = lastPreinfusion;            // preinfusion time in s
+                    preinfusionPause = lastPreinfusionPause; // preinfusion pause time in s
+                    brewTime = lastBrewTime;                       // brewtime in s
                 }
             }
             LOGF(INFO, "Rotary Encoder Button down for: %lu ms", duration);
@@ -2056,13 +2068,14 @@ void looppump() {
     if(pumpRelay.getState()) {
         currentMillisPumpControl = millis();
         if (currentMillisPumpControl - previousMillisPumpControl >= pumpControlInterval) {
-            PidResults[loopIndexPid][7] = currentMillisPumpControl - previousMillisPumpControl;
+            PidResults[loopIndexPid][8] = currentMillisPumpControl - previousMillisPumpControl;
             previousMillisPumpControl = currentMillisPumpControl;
 
             PidResults[loopIndexPid][0] = inputPressure;
             PidResults[loopIndexPid][1] = setPressure;
             PidResults[loopIndexPid][2] = pumpFlowRate;
             PidResults[loopIndexPid][3] = setPumpFlowRate;
+            PidResults[loopIndexPid][4] = weightBrewed;
 
             if(encodercontrol == 1) {   //power
                 pumpControl = POWER;
@@ -2112,9 +2125,9 @@ void looppump() {
                 //PID output
                 float output = (inputKp * error) + (inputKi * pumpintegral) + (inputKd * pumpderivative);
                 
-                PidResults[loopIndexPid][4] = inputKp * error;
-                PidResults[loopIndexPid][5] = inputKi * pumpintegral;
-                PidResults[loopIndexPid][6] = inputKd * pumpderivative;
+                PidResults[loopIndexPid][5] = inputKp * error;
+                PidResults[loopIndexPid][6] = inputKi * pumpintegral;
+                PidResults[loopIndexPid][7] = inputKd * pumpderivative;
 
                 DimmerPower = constrain((int)output, 0, MaxDimmerPower);
             }
@@ -2167,7 +2180,7 @@ void runRecipe(int recipeIndex) {
 
     if (debug_recipe == false) {
         debug_recipe = true;
-        brewTime = 1000;               // disable  brewtime in s
+        brewTime = 0;               // disable  brewtime in s
         lastPressure = 0.0;
         lastFlow = 0.0;
         phaseTiming = 0;
@@ -2278,6 +2291,7 @@ void looppid() {
 
             if (mqtt.connected() == 1) {
                 mqtt.loop();
+                previousMqttConnection = millis();
 #if MQTT_HASSIO_SUPPORT == 1
                 //resend discovery messages if not during a main function and MQTT has been disconnected but has now reconnected
                 //this could mean mqtt_was_connected stays false for up to 5 mins, could change it to sendHASSIODiscoveryMsg();

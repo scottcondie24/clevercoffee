@@ -35,6 +35,8 @@ char topic_set[256];
 
 unsigned long lastMQTTConnectionAttempt = millis();
 unsigned int MQTTReCnctCount = 0;
+unsigned long previousMqttConnection = millis();
+unsigned long mqttReconnectInterval = 600000; //10 minutes
 
 extern std::map<const char*, std::function<editable_t*()>, cmp_str> mqttVars;
 extern std::map<const char*, std::function<double()>, cmp_str> mqttSensors;
@@ -87,12 +89,18 @@ void checkMQTT() {
             if (mqtt.connect(hostname, mqtt_username, mqtt_password, topic_will, 0, true, "offline")) {
                 mqtt.subscribe(topic_set);
                 LOGF(DEBUG, "Subscribed to MQTT Topic: %s", topic_set);
+                MQTTReCnctCount = 0;    //reset MQTT reconnect count to zero after a successful connection
             } // Try to reconnect to the server; connect() is a blocking
               // function, watch the timeout!
             else {
                 LOGF(DEBUG, "Failed to connect to MQTT due to reason: %i", mqtt.state());
             }
         }
+    }
+    //reset MQTT reconnect count to zero after mqttReconnectInterval so it can try to connect again
+    else if (millis() - previousMqttConnection >= mqttReconnectInterval) {
+        MQTTReCnctCount = 0; 
+        previousMqttConnection = millis();   
     }
 }
 
