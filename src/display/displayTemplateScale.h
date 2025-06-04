@@ -110,7 +110,7 @@ void printScreen() {
     }
 #endif
 
-#if (FEATURE_PRESSURESENSOR == 1)
+#if (FEATURE_PRESSURESENSOR > 0)
     u8g2.setCursor(32, 46);
     u8g2.print(langstring_pressure);
     u8g2.print(inputPressure, 1);

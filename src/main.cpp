@@ -40,6 +40,7 @@
 #include "hardware/StandardLED.h"
 #include "hardware/Switch.h"
 #include "hardware/TempSensorDallas.h"
+#include "hardware/TempSensorK.h"
 #include "hardware/TempSensorTSIC.h"
 #include "hardware/pinmapping.h"
 
@@ -56,6 +57,11 @@ hw_timer_t* timer = NULL;
 
 #if (FEATURE_PRESSURESENSOR == 1)
 #include "hardware/pressureSensor.h"
+#include <Wire.h>
+#endif
+
+#if (FEATURE_PRESSURESENSOR == 2)
+#include "hardware/pressureSensorAds1115.h"
 #include <Wire.h>
 #endif
 
@@ -81,6 +87,7 @@ enum MachineState {
     kBrew = 30,
     kManualFlush = 35,
     kSteam = 40,
+    kWater = 45,
     kBackflush = 50,
     kWaterTankEmpty = 70,
     kEmergencyStop = 80,
@@ -128,15 +135,23 @@ float inputPressureFilter = 0;
 const unsigned long intervalPressure = 100;
 unsigned long previousMillisPressure; // initialisation at the end of init()
 #endif
+#if (FEATURE_PRESSURESENSOR == 2)
+float inputPressure = 0;
+float inputPressureFilter = 0;
+const unsigned long intervalPressure = 20;
+unsigned long previousMillisPressure; // initialisation at the end of init()
+#endif
 
 Switch* waterTankSensor;
 
 GPIOPin* statusLedPin;
 GPIOPin* brewLedPin;
+GPIOPin* waterLedPin;
 GPIOPin* steamLedPin;
 
 LED* statusLed;
 LED* brewLed;
+LED* waterLed;
 LED* steamLed;
 
 GPIOPin heaterRelayPin(PIN_HEATER, GPIOPin::OUT);
@@ -146,7 +161,7 @@ GPIOPin pumpRelayPin(PIN_PUMP, GPIOPin::OUT);
 Relay pumpRelay(pumpRelayPin, PUMP_VALVE_SSR_TYPE);
 
 GPIOPin valveRelayPin(PIN_VALVE, GPIOPin::OUT);
-Relay valveRelay(valveRelayPin, PUMP_VALVE_SSR_TYPE);
+Relay valveRelay(valveRelayPin, PUMP_WATER_SSR_TYPE);
 
 Switch* powerSwitch;
 Switch* brewSwitch;
@@ -1357,6 +1372,9 @@ void setup() {
 
 #if (FEATURE_PRESSURESENSOR == 1)
     Wire.begin();
+#elif (FEATURE_PRESSURESENSOR == 2)
+    Wire.begin();
+    pressureInit();
 #endif
 
     // Editable values reported to MQTT
@@ -1412,7 +1430,7 @@ void setup() {
     mqttSensors["currBrewWeight"] = [] { return currBrewWeight; };
 #endif
 
-#if FEATURE_PRESSURESENSOR == 1
+#if FEATURE_PRESSURESENSOR > 0
     mqttSensors["pressure"] = [] { return inputPressureFilter; };
 #endif
     initTimer1();
@@ -1438,13 +1456,16 @@ void setup() {
     if (LED_TYPE == LED::STANDARD) {
         statusLedPin = new GPIOPin(PIN_STATUSLED, GPIOPin::OUT);
         brewLedPin = new GPIOPin(PIN_BREWLED, GPIOPin::OUT);
+        waterLedPin = new GPIOPin(PIN_WATERLED, GPIOPin::OUT);
         steamLedPin = new GPIOPin(PIN_STEAMLED, GPIOPin::OUT);
 
         statusLed = new StandardLED(*statusLedPin, FEATURE_STATUS_LED);
         brewLed = new StandardLED(*brewLedPin, FEATURE_BREW_LED);
+        waterLed = new StandardLED(*waterLedPin, FEATURE_WATER_LED);
         steamLed = new StandardLED(*steamLedPin, FEATURE_STEAM_LED);
 
         brewLed->turnOff();
+        waterLed->turnOff();
         steamLed->turnOff();
     }
     else {
@@ -1510,6 +1531,9 @@ void setup() {
     else if (TEMP_SENSOR == 2) {
         tempSensor = new TempSensorTSIC(PIN_TEMPSENSOR);
     }
+    else if (TEMP_SENSOR == 3) {
+        tempSensor = new TempSensorK(PIN_TEMPERATURE_CLK, PIN_TEMPERATURE_CS, PIN_TEMPERATURE_SO);
+    }
 
     temperature = tempSensor->getCurrentTemperature();
 
@@ -1532,7 +1556,7 @@ void setup() {
     previousMillisScale = currentTime;
 #endif
 
-#if (FEATURE_PRESSURESENSOR == 1)
+#if (FEATURE_PRESSURESENSOR > 0)
     previousMillisPressure = currentTime;
 #endif
 
@@ -1647,7 +1671,7 @@ void looppid() {
     manualFlush();
 #endif
 
-#if (FEATURE_PRESSURESENSOR == 1)
+#if (FEATURE_PRESSURESENSOR > 0)
     unsigned long currentMillisPressure = millis();
 
     if (currentMillisPressure - previousMillisPressure >= intervalPressure) {
@@ -1756,6 +1780,7 @@ void loopLED() {
         statusLed->turnOff();
     }
     brewLed->setGPIOState(machineState == kBrew);
+    waterLed->setGPIOState(machineState == kWater);
     steamLed->setGPIOState(machineState == kSteam);
 }
 
