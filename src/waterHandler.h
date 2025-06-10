@@ -19,7 +19,8 @@ extern int DimmerPower = 95;
 extern float flowKp = 8.0;
 extern float flowKi = 30.0;
 extern float flowKd = 0.0;
-
+extern float pumpintegral = 0.0;
+extern float previousError = 0;
 
 float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
 float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
@@ -33,8 +34,6 @@ int featurePumpDimmer = FEATURE_PUMP_DIMMER;
 
 unsigned long blockMicrosDisplayInterval = 20000;
 unsigned long blockMicrosDisplayStart = 0;
-static float pumpintegral = 0.0;
-float previousError = 0;
 const float pumpdt = pumpControlInterval / 1000.0;  // Time step in seconds
 
 
@@ -113,23 +112,6 @@ void looppump() {
     static float inputKi = 0.0;
     static float inputKd = 0.0;
 
-
-    // --- PID control variables ---
-    /*if(featurePumpDimmer == 1) {
-        pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
-        pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
-        pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
-        integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pumpKi
-        MaxDimmerPower = 100;
-    }
-    if(featurePumpDimmer == 2) {
-        pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
-        pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
-        pressureKd = 1.5;//   1.0;//3.0;//7.0;//6.0;//   2.0;   //3.0;       // Derivative gain
-        integralAntiWindup = 8.0;  //pumpintegral += error * pumpdt is capped at +-integralAntiWindup, then *pumpKi
-        MaxDimmerPower = 100;
-    }*/
-
     if(pumpRelay.getState()) {
         currentMillisPumpControl = millis();
         if (currentMillisPumpControl - previousMillisPumpControl >= pumpControlInterval) {
@@ -156,7 +138,7 @@ void looppump() {
             }
 
 
-            if(pumpControl == PRESSURE) {   //pressure   and temporary recipes
+            if(pumpControl == PRESSURE) {   //pressure
                 inputPID = inputPressureFilter;//inputPressure;
                 targetPID = setPressure;
                 inputKp = pressureKp;
@@ -219,7 +201,7 @@ void looppump() {
     else {  //Pump turned off
         pumpintegral = 0;
         previousError = 0;
-        previousMillisPumpControl = millis() - pumpControlInterval; //stops large spikes in log data
+        previousMillisPumpControl = millis() - pumpControlInterval; //stops large spikes in log data timing
         PumpDimmerCore::ControlMethod method = (featurePumpDimmer == 2) ? PumpDimmerCore::ControlMethod::PHASE : PumpDimmerCore::ControlMethod::PSM;
         pumpRelay.setControlMethod(method);
     }

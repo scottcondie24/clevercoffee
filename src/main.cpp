@@ -2021,7 +2021,9 @@ void runRecipe(int recipeIndex) {
     if (recipeIndex < 0 || recipeIndex >= recipesCount) return;
     
     static float lastPressure = 0.0;
+    static float lastSetPressure = 0.0;
     static float lastFlow = 0.0;
+    static float lastSetFlow = 0.0;
 
     BrewRecipe* recipe = &recipes[recipeIndex];
     BrewPhase* phase = &recipe->phases[currentPhaseIndex];
@@ -2037,7 +2039,9 @@ void runRecipe(int recipeIndex) {
         debug_recipe = true;
         brewTime = 0;               // disable  brewtime in s
         lastPressure = 0.0;
+        lastSetPressure = 0.0;
         lastFlow = 0.0;
+        lastSetFlow = 0.0;
         phaseTiming = 0;
         LOGF(DEBUG, "Running recipe: %s\n", recipe->name);
         LOGF(DEBUG, "Phase %d: %s for %.1f seconds", currentPhaseIndex, phase->name, phase->seconds);
@@ -2073,8 +2077,10 @@ void runRecipe(int recipeIndex) {
     }
 
     if (exitReached || (timeBrewed > (phase->seconds)*1000 + phaseTiming)) {
-        lastPressure = inputPressureFilter;//phase->pressure;
-        lastFlow = pumpFlowRate;//phase->flow;
+        lastPressure = inputPressureFilter;
+        lastSetPressure = phase->pressure;
+        lastFlow = pumpFlowRate;
+        lastSetFlow = phase->flow;
         currentPhaseIndex += 1;
         if (currentPhaseIndex < recipe->phaseCount) {
             phase = &recipe->phases[currentPhaseIndex];
@@ -2092,7 +2098,15 @@ void runRecipe(int recipeIndex) {
     //check if still in phases, otherwise skip control
     if(currentPhaseIndex < recipe->phaseCount) {
         if (phase->pump == FLOW) {
-            pumpControl = FLOW;
+            if(pumpControl != phase->pump) {    //reset PID
+                pumpintegral = 0;
+                previousError = 0;
+                pumpControl = FLOW;
+            }
+            else {
+                lastFlow = lastSetFlow; //if already in FLOW mode then continue from last requested flow rate, otherwise use last measured as starting point
+            }
+            
             if (phase->transition == TRANSITION_SMOOTH) {
                 float elapsed = (timeBrewed - phaseTiming) / 1000.0;
                 float t = elapsed / phase->seconds;
@@ -2105,7 +2119,15 @@ void runRecipe(int recipeIndex) {
             setPressure = 0;
         }
         else if (phase->pump == PRESSURE) {
-            pumpControl = PRESSURE;
+            if(pumpControl != phase->pump) {    //reset PID
+                pumpintegral = 0;
+                previousError = 0;
+                pumpControl = PRESSURE;
+            }
+            else {
+                lastPressure = lastSetPressure; //if already in PRESSURE mode then continue from last requested pressure, otherwise use last measured as starting point
+            }
+            
             if (phase->transition == TRANSITION_SMOOTH) {
                 float elapsed = (timeBrewed - phaseTiming) / 1000.0;
                 float t = elapsed / phase->seconds;
@@ -2204,7 +2226,16 @@ void looppid() {
     if (((millis() - lastBrewEvent) > brewEventInterval) && (machineState == kBrew)&&(!mqtt_update)&&(!HASSIO_update)&&(!buffer_ready)) {
         website_update = true;
         // send brew data to website endpoint
-        sendBrewEvent(inputPressureFilter, setPressure, pumpFlowRate, setPumpFlowRate, weightBrewed, DimmerPower);
+        if(pumpControl == FLOW) {
+            sendBrewEvent(inputPressureFilter, 0.0, pumpFlowRate, setPumpFlowRate, weightBrewed, DimmerPower);
+        }
+        else if(pumpControl == PRESSURE) {
+            sendBrewEvent(inputPressureFilter, setPressure, pumpFlowRate, 0.0, weightBrewed, DimmerPower);
+        }
+        else {
+            sendBrewEvent(inputPressureFilter, 0.0, pumpFlowRate, 0.0, weightBrewed, DimmerPower);
+        }
+
         lastBrewEvent = millis();
     }
 
