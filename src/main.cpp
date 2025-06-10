@@ -2103,7 +2103,7 @@ void runRecipe(int recipeIndex) {
         if (phase->pump == FLOW) {
             if(phaseReset) {
                 if(pumpControl != phase->pump) {    //reset PID
-                    pumpintegral = 0;
+                    pumpintegral = pumpintegral * (pressureKi/flowKi);
                     previousError = 0;
                     pumpControl = FLOW;
                 }
@@ -2127,7 +2127,7 @@ void runRecipe(int recipeIndex) {
         else if (phase->pump == PRESSURE) {
             if(phaseReset) {
                 if(pumpControl != phase->pump) {    //reset PID
-                    pumpintegral = 0;
+                    pumpintegral = pumpintegral * (flowKi/pressureKi);
                     previousError = 0;
                     pumpControl = PRESSURE;
                 }
