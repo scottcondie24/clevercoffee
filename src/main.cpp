@@ -2024,6 +2024,7 @@ void runRecipe(int recipeIndex) {
     static float lastSetPressure = 0.0;
     static float lastFlow = 0.0;
     static float lastSetFlow = 0.0;
+    static bool phaseReset = false;
 
     BrewRecipe* recipe = &recipes[recipeIndex];
     BrewPhase* phase = &recipe->phases[currentPhaseIndex];
@@ -2043,6 +2044,7 @@ void runRecipe(int recipeIndex) {
         lastFlow = 0.0;
         lastSetFlow = 0.0;
         phaseTiming = 0;
+        phaseReset = true;
         LOGF(DEBUG, "Running recipe: %s\n", recipe->name);
         LOGF(DEBUG, "Phase %d: %s for %.1f seconds", currentPhaseIndex, phase->name, phase->seconds);
     }
@@ -2082,6 +2084,7 @@ void runRecipe(int recipeIndex) {
         lastFlow = pumpFlowRate;
         lastSetFlow = phase->flow;
         currentPhaseIndex += 1;
+        phaseReset = true;
         if (currentPhaseIndex < recipe->phaseCount) {
             phase = &recipe->phases[currentPhaseIndex];
             LOGF(DEBUG, "Phase %d: %s for %.1f seconds", currentPhaseIndex, phase->name, phase->seconds);
@@ -2098,13 +2101,16 @@ void runRecipe(int recipeIndex) {
     //check if still in phases, otherwise skip control
     if(currentPhaseIndex < recipe->phaseCount) {
         if (phase->pump == FLOW) {
-            if(pumpControl != phase->pump) {    //reset PID
-                pumpintegral = 0;
-                previousError = 0;
-                pumpControl = FLOW;
-            }
-            else {
-                lastFlow = lastSetFlow; //if already in FLOW mode then continue from last requested flow rate, otherwise use last measured as starting point
+            if(phaseReset) {
+                if(pumpControl != phase->pump) {    //reset PID
+                    pumpintegral = 0;
+                    previousError = 0;
+                    pumpControl = FLOW;
+                }
+                else {
+                    lastFlow = lastSetFlow; //if already in FLOW mode then continue from last requested flow rate, otherwise use last measured as starting point
+                }
+                phaseReset = false;
             }
             
             if (phase->transition == TRANSITION_SMOOTH) {
@@ -2119,13 +2125,16 @@ void runRecipe(int recipeIndex) {
             setPressure = 0;
         }
         else if (phase->pump == PRESSURE) {
-            if(pumpControl != phase->pump) {    //reset PID
-                pumpintegral = 0;
-                previousError = 0;
-                pumpControl = PRESSURE;
-            }
-            else {
-                lastPressure = lastSetPressure; //if already in PRESSURE mode then continue from last requested pressure, otherwise use last measured as starting point
+            if(phaseReset) {
+                if(pumpControl != phase->pump) {    //reset PID
+                    pumpintegral = 0;
+                    previousError = 0;
+                    pumpControl = PRESSURE;
+                }
+                else {
+                    lastPressure = lastSetPressure; //if already in PRESSURE mode then continue from last requested pressure, otherwise use last measured as starting point
+                }
+                phaseReset = false;
             }
             
             if (phase->transition == TRANSITION_SMOOTH) {
