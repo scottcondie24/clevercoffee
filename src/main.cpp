@@ -2101,49 +2101,59 @@ void runRecipe(int recipeIndex) {
     //check if still in phases, otherwise skip control
     if(currentPhaseIndex < recipe->phaseCount) {
         if (phase->pump == FLOW) {
-            if(phaseReset) {
-                if(pumpControl != phase->pump) {    //reset PID
-                    pumpintegral = pumpintegral * (pressureKi/flowKi);
-                    previousError = 0;
-                    pumpControl = FLOW;
-                }
-                else {
-                    lastFlow = lastSetFlow; //if already in FLOW mode then continue from last requested flow rate, otherwise use last measured as starting point
-                }
-                phaseReset = false;
-            }
-            
             if (phase->transition == TRANSITION_SMOOTH) {
+                if(phaseReset) {
+                    if(pumpControl != phase->pump) {    //reset PID
+                        pumpintegral = pumpintegral * (pressureKi/flowKi);
+                        previousError = 0;
+                        pumpControl = FLOW;
+                    }
+                    else {
+                        lastFlow = lastSetFlow; //if already in FLOW mode then continue from last requested flow rate, otherwise use last measured as starting point
+                    }
+                    phaseReset = false;
+                }
                 float elapsed = (timeBrewed - phaseTiming) / 1000.0;
                 float t = elapsed / phase->seconds;
                 if (t > 1.0) t = 1.0;
                 setPumpFlowRate = lastFlow + (phase->flow - lastFlow) * t;
             } 
             else {
+                if(phaseReset) {
+                    pumpintegral = 0;
+                    previousError = 0;
+                    phaseReset = false;
+                }
+                pumpControl = FLOW;
                 setPumpFlowRate = phase->flow;
             }
             setPressure = 0;
         }
         else if (phase->pump == PRESSURE) {
-            if(phaseReset) {
-                if(pumpControl != phase->pump) {    //reset PID
-                    pumpintegral = pumpintegral * (flowKi/pressureKi);
-                    previousError = 0;
-                    pumpControl = PRESSURE;
-                }
-                else {
-                    lastPressure = lastSetPressure; //if already in PRESSURE mode then continue from last requested pressure, otherwise use last measured as starting point
-                }
-                phaseReset = false;
-            }
-            
             if (phase->transition == TRANSITION_SMOOTH) {
+                if(phaseReset) {
+                    if(pumpControl != phase->pump) {    //reset PID
+                        pumpintegral = pumpintegral * (flowKi/pressureKi);
+                        previousError = 0;
+                        pumpControl = PRESSURE;
+                    }
+                    else {
+                        lastPressure = lastSetPressure; //if already in PRESSURE mode then continue from last requested pressure, otherwise use last measured as starting point
+                    }
+                    phaseReset = false;
+                }
                 float elapsed = (timeBrewed - phaseTiming) / 1000.0;
                 float t = elapsed / phase->seconds;
                 if (t > 1.0) t = 1.0;
                 setPressure = lastPressure + (phase->pressure - lastPressure) * t;
             } 
             else {
+                if(phaseReset) {
+                    pumpintegral = 0;
+                    previousError = 0;
+                    phaseReset = false;
+                }
+                pumpControl = PRESSURE;
                 setPressure = phase->pressure;
             }
             setPumpFlowRate = 0;
