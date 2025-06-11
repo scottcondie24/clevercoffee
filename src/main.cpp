@@ -2179,7 +2179,7 @@ void runRecipe(int recipeIndex) {
 void looppid() {
     // Only do Wifi stuff, if Wifi is connected
     if (WiFi.status() == WL_CONNECTED && offlineMode == 0) {
-        if ((FEATURE_MQTT == 1)&&(micros() - blockMicrosDisplayStart < blockMicrosDisplayInterval)) {
+        if ((FEATURE_MQTT == 1)&&(micros() - blockStart < blockMQTTInterval)) {
             checkMQTT();
             if(!buffer_ready) {
                 writeSysParamsToMQTT(true); // Continue on error
@@ -2242,7 +2242,7 @@ void looppid() {
         lastmachinestatehtml = machineState;
     }
 
-    if (((millis() - lastBrewEvent) > brewEventInterval) && (machineState == kBrew)&&(!mqtt_update)&&(!HASSIO_update)&&(!buffer_ready)) {
+    if (((millis() - lastBrewEvent) > brewEventInterval) && (machineState == kBrew)&&(!mqtt_update)&&(!HASSIO_update)&&(!buffer_ready) && (micros() - blockStart < blockWebsiteInterval)) {
         website_update = true;
         // send brew data to website endpoint
         if(pumpControl == FLOW) {
@@ -2258,7 +2258,7 @@ void looppid() {
         lastBrewEvent = millis();
     }
 
-    if (((millis() - lastTempEvent) > tempEventInterval)&&(!mqtt_update)&&(!HASSIO_update)&&(!buffer_ready)) {
+    if (((millis() - lastTempEvent) > tempEventInterval)&&(!mqtt_update)&&(!HASSIO_update)&&(!buffer_ready)&&(micros() - blockStart < blockWebsiteInterval)) {
         website_update = true;
         // send temperatures to website endpoint
         sendTempEvent(temperature, brewSetpoint, pidOutput / 10); // pidOutput is promill, so /10 to get percent value
@@ -2335,7 +2335,7 @@ void looppid() {
 
     //temporary - update display if not too close to pumpPID timing
 #if OLED_DISPLAY != 0
-    if((micros() - blockMicrosDisplayStart < blockMicrosDisplayInterval)&&(!website_update)&&(!mqtt_update)&&(!HASSIO_update)&&(standbyModeRemainingTimeDisplayOffMillis > 0)) {
+    if((micros() - blockStart < blockDisplayInterval)&&(!website_update)&&(!mqtt_update)&&(!HASSIO_update)&&(standbyModeRemainingTimeDisplayOffMillis > 0)) {
         if(buffer_ready) {
             u8g2.sendBuffer();
             buffer_ready = false;

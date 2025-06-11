@@ -30,11 +30,14 @@ int MaxDimmerPower = 100;
 unsigned long currentMillisPumpControl = 0;
 unsigned long previousMillisPumpControl = 0;
 unsigned long pumpControlInterval = 50;
+unsigned long maxPumpControlInterval = 100;
 int featurePumpDimmer = FEATURE_PUMP_DIMMER;
 
-unsigned long blockMicrosDisplayInterval = 20000;
-unsigned long blockMicrosDisplayStart = 0;
-const float pumpdt = pumpControlInterval / 1000.0;  // Time step in seconds
+unsigned long blockMQTTInterval = 10000;
+unsigned long blockWebsiteInterval = 40000;
+unsigned long blockDisplayInterval = 12000;
+unsigned long blockStart = 0;
+float pumpdt = pumpControlInterval / 1000.0;  // Time step in seconds
 
 
 
@@ -114,7 +117,13 @@ void looppump() {
 
     if(pumpRelay.getState()) {
         currentMillisPumpControl = millis();
-        if (currentMillisPumpControl - previousMillisPumpControl >= pumpControlInterval) {
+        if (currentMillisPumpControl - previousMillisPumpControl >= pumpControlInterval) {  //50ms timing
+            if(currentMillisPumpControl - previousMillisPumpControl > maxPumpControlInterval) { //if greater than 100ms, set pumpdt to 100ms to stop jumps due to an extended freeze
+                pumpdt = maxPumpControlInterval / 1000.0;
+            }
+            else {
+                pumpdt = (currentMillisPumpControl - previousMillisPumpControl) / 1000.0;   //set to between 50ms and 100ms
+            }
             PidResults[loopIndexPid][8] = currentMillisPumpControl - previousMillisPumpControl;
             previousMillisPumpControl = currentMillisPumpControl;
 
@@ -206,5 +215,5 @@ void looppump() {
         pumpRelay.setControlMethod(method);
     }
 #endif
-    blockMicrosDisplayStart = micros(); //give other functions like display and MQTT some time to refresh
+    blockStart = micros(); //give other functions like display and MQTT some time to refresh
 }
