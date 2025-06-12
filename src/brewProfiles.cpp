@@ -14,10 +14,12 @@ const int springLeverPhasesCount = sizeof(springLeverPhases) / sizeof(BrewPhase)
 
 BrewPhase londiniumPhases[] = {
         //0    1   2   3   4    5  6   7    8   9  10  11   12       13                     14               15
+    {"pause", 0, 0, 0, 88.0, 0, 0, 0, 0, 0, 0, 0, 1.0, EXIT_TYPE_NONE, TRANSITION_FAST, FLOW},  //wait for weightBrewed to be reset
     {"fill", 0, 8.0, 0, 88.0, 5.0, 0, 0.0, 3.0, 0, 0, 0.0, 20.0, EXIT_TYPE_PRESSURE_OVER, TRANSITION_FAST, FLOW},
     {"infuse", 3.0, 0.0, 0, 88.0, 4.0, 0, 0, 0, 0, 0, 0.0, 30.0, EXIT_TYPE_NONE, TRANSITION_FAST, PRESSURE},        //exits at 4g
-    {"pressure", 9.0, 0.0, 0, 88.0, 0, 0, 1.7, 0.0, 0.0, 0.0, 0.0, 60.0, EXIT_TYPE_FLOW_OVER, TRANSITION_FAST, PRESSURE},
-    {"maintain flow", 0.0, 1.7, 0, 88.0, 50.0, 0, 0, 0, 0, 0.0, 0.0, 30.0, EXIT_TYPE_NONE, TRANSITION_SMOOTH, FLOW},    //exits at 50g
+    {"pressure ramp", 8.6, 0.0, 0, 88.0, 0, 0, 1.7, 0.0, 0.0, 0.0, 0.0, 2.0, EXIT_TYPE_FLOW_OVER, TRANSITION_SMOOTH, PRESSURE}, //ramp so OPV doesnt immediately open
+    {"pressure", 8.6, 0.0, 0, 88.0, 0, 0, 1.7, 0.0, 0.0, 0.0, 0.0, 60.0, EXIT_TYPE_FLOW_OVER, TRANSITION_FAST, PRESSURE},
+    {"maintain flow", 0.0, 1.7, 0, 88.0, 50.0, 0, 0, 0, 0, 0.0, 0.0, 30.0, EXIT_TYPE_NONE, TRANSITION_FAST, FLOW},    //exits at 50g
 };
 const int londiniumPhasesCount = sizeof(londiniumPhases) / sizeof(BrewPhase);
 
@@ -40,7 +42,7 @@ const int sixBarEspressoPhasesCount = sizeof(sixBarEspressoPhases) / sizeof(Brew
 
 BrewPhase bloomingEspressoPhases[] = {
     {"infuse", 0, 4.0, 0, 92.0, 0, 0, 0, 1.0, 0, 0, 0, 23.0, EXIT_TYPE_PRESSURE_OVER, TRANSITION_FAST, FLOW},
-    {"pause", 0, 0, 0, 92.0, 0, 0, 0, 0, 0, 0, 0, 30.0, EXIT_TYPE_NONE, TRANSITION_NONE, FLOW},
+    {"pause", 0, 0, 0, 92.0, 0, 0, 0, 0, 0, 0, 0, 30.0, EXIT_TYPE_NONE, TRANSITION_FAST, FLOW},
     {"ramp", 0, 2.2, 0, 92.0, 0, 0, 0, 0, 0, 0, 0, 5.0, EXIT_TYPE_NONE, TRANSITION_SMOOTH, FLOW},
     {"flow", 0, 2.2, 0, 92.0, 0, 0, 0, 0, 0, 0.0, 0.0, 20.0, EXIT_TYPE_NONE, TRANSITION_SMOOTH, FLOW},
 };

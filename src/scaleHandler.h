@@ -117,8 +117,12 @@ void checkWeight() {
     }
 #endif
 #if SCALE_TYPE == 0
-    //currWeight = (int)(w1*2) + ((w2*2)/1000); //used to see the individual values within one number, not a correct weight
-    currWeight = w1 + w2;
+    if(DEBUG_SCALES) {
+        currWeight = (int)(w1*2) + ((w2*2)/1000); //used to see the individual values within one number, not a correct weight
+    }
+    else {
+        currWeight = w1 + w2;
+    }
 #else
     currWeight = w1;
 

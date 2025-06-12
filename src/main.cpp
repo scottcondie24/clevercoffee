@@ -23,7 +23,7 @@
 #include <U8g2lib.h> // i2c display
 #include <WiFiManager.h>
 #include <os.h>
-#include <ESP32RotaryEncoder.h>
+#include <ESP32Encoder.h>
 
 // Includes
 #include "display/bitmaps.h" // user icons for display
@@ -44,6 +44,7 @@
 #include "hardware/TempSensorTSIC.h"
 #include "hardware/TempSensorK.h"
 #include "hardware/pinmapping.h"
+
 
 // User configuration & defaults
 #include "defaults.h"
@@ -153,6 +154,9 @@ double lastPreinfusion = PRE_INFUSION_TIME;
 double lastPreinfusionPause = PRE_INFUSION_PAUSE_TIME;
 double lastBrewTime = BREW_TIME;
 
+//encoder menu
+int menuLevel = 0;
+int encodercontrol = ENCODER_CONTROL;
 
 //Pressure Sensor
 #if (FEATURE_PRESSURESENSOR == 1)
@@ -204,7 +208,7 @@ Switch* waterSwitch;
 
 TempSensor* tempSensor;
 
-RotaryEncoder rotaryEncoder(PIN_ROTARY_CLK, PIN_ROTARY_DT);     //SW interrupt crashes at the moment 05/05/2025
+
 
 #include "isr.h"
 
@@ -289,16 +293,6 @@ bool display_update = false;
 bool website_update = false;
 bool mqtt_update = false;
 bool HASSIO_update = false;
-
-
-
-//Encoder
-unsigned long currentMillisEncoderSw = 0;
-unsigned long startMillisEncoderSw = 0;
-unsigned long EncoderSwitchBackflushInterval = 2000;
-unsigned long EncoderSwitchControlInterval = 1000;
-bool encoderSwPressed = false;
-int encodercontrol = ENCODER_CONTROL;
  
 #if aggbTn == 0
 double aggbKi = 0;
@@ -345,6 +339,8 @@ String lastwaterstatedebug = "off";
 
 //waterHandler has variables used in displays
 #include "waterHandler.h"
+
+#include "hardware/rotaryEncoder.h"
 
 // system parameter EEPROM storage wrappers (current value as pointer to variable, minimum, maximum, optional storage ID)
 SysPara<uint8_t> sysParaPidOn(&pidON, 0, 1, STO_ITEM_PID_ON);
@@ -1761,13 +1757,10 @@ void setup() {
 
     
     if(ENCODER_CONTROL > 0) {
-        rotaryEncoder.setEncoderType( EncoderType::HAS_PULLUP );
-        rotaryEncoder.setBoundaries(0,100,true);
-        rotaryEncoder.onTurned( &knobCallback );
-        //rotaryEncoder.onPressed( &buttonCallback );
-        rotaryEncoder.begin();
+        initEncoder();
+        encoderSw = new IOSwitch(PIN_ROTARY_SW, GPIOPin::IN_PULLUP, Switch::TOGGLE, Switch::NORMALLY_CLOSED);
     }
-    encoderSw = new IOSwitch(PIN_ROTARY_SW, GPIOPin::IN_PULLUP, Switch::TOGGLE, Switch::NORMALLY_CLOSED);
+    
 
     setupDone = true;
 
@@ -1775,69 +1768,6 @@ void setup() {
 
     double fsUsage = ((double)LittleFS.usedBytes() / LittleFS.totalBytes()) * 100;
     LOGF(INFO, "LittleFS: %d%% (used %ld bytes from %ld bytes)", (int)ceil(fsUsage), LittleFS.usedBytes(), LittleFS.totalBytes());
-}
-
-void knobCallback(long value){
-    static long lastencodervalue = 0;
-    float tempvalue = 0.0;      //use a tempvalue so only the final result is written to each variable
-
-    LOGF(INFO, "Rotary Encoder Value: %i", value);
-
-    if((value < 10) && (lastencodervalue > 90)) {
-        lastencodervalue -= 101;
-    }
-    else if((value > 90) && (lastencodervalue < 10)) {
-        lastencodervalue += 101;
-    }
-
-    if(encodercontrol == 1) {
-        tempvalue = DimmerPower + (value-lastencodervalue);
-        DimmerPower = constrain(tempvalue, 0, 100);
-    }
-    else if(encodercontrol == 2) {
-        tempvalue = (value-lastencodervalue)/5.0;
-        tempvalue = setPressure + tempvalue;
-        setPressure = constrain(tempvalue, 4.0, 10.0);    //4-10
-    }
-    else if(encodercontrol == 3) {
-        tempvalue = (value-lastencodervalue); 
-        tempvalue = currentRecipeIndex + tempvalue;
-        currentRecipeIndex = constrain(tempvalue, 0.0, recipesCount - 1);    //0-recipesCount
-        currentPhaseIndex = 0;
-        recipeName = recipes[currentRecipeIndex].name;
-
-        LOGF(INFO, "Recipe Index: %i -- Recipe Name: %s", currentRecipeIndex, recipeName);
-    }
-    else if(encodercontrol == 4) {
-        tempvalue = (value-lastencodervalue)/5.0; 
-        tempvalue = setPumpFlowRate + tempvalue;
-        setPumpFlowRate = constrain(tempvalue, 0.0, 10.0);    //0-10
-    }
-    else if(encodercontrol == 5) {
-        tempvalue = (value-lastencodervalue)/5.0; 
-        tempvalue = flowKp + tempvalue;
-        flowKp = constrain(tempvalue, 0.0, 40.0);    //0-40
-    }
-    else if(encodercontrol == 6) {
-        tempvalue = (value-lastencodervalue)/5.0; 
-        tempvalue = flowKi + tempvalue;
-        flowKi = constrain(tempvalue, 0.0, 40.0);    //0-40
-    }
-    else if(encodercontrol == 7) {
-        tempvalue = (value-lastencodervalue)/100.0; 
-        tempvalue = flowKd + tempvalue;
-        flowKd = constrain(tempvalue, 0.0, 4.0);    //0-4
-    }
-    else if(encodercontrol == 8) {
-        tempvalue = (value-lastencodervalue); 
-        tempvalue = featurePumpDimmer + tempvalue;
-        featurePumpDimmer = constrain(tempvalue, 1, 2);    //1-2
-    }
-    lastencodervalue = value;
-}
-void buttonCallback(unsigned long duration){
-    LOGF(INFO, "Rotary Encoder Button down for: %u ms", duration);
-    // not used
 }
 
 void loop() {
@@ -1857,53 +1787,9 @@ void loop() {
     // Update LED output based on machine state
     loopLED();
 
+    //read encoder dial and switch
+    encoderHandler();
 
-
-    if(encoderSw->isPressed()) {
-        if(encoderSwPressed == false) {
-            startMillisEncoderSw = millis();
-            encoderSwPressed = true;
-        }
-    }
-    else {
-        if(encoderSwPressed == true) {
-            unsigned long duration = millis() - startMillisEncoderSw;
-            if(duration > EncoderSwitchBackflushInterval) {   //toggle every interval
-                if(machineState == kBackflush) {
-                    setBackflush(0);
-                    startMillisEncoderSw = millis();
-                }
-                if(machineState == kPidNormal) {
-                    setBackflush(1);
-                    startMillisEncoderSw = millis();
-                }
-            }
-            else if(duration > EncoderSwitchControlInterval) {   //toggle every interval
-                encodercontrol += 1;
-                if(encodercontrol > 8) {
-                    encodercontrol = 1;
-                }
-                LOGF(INFO, "Rotary Encoder Mode Changed: %i", encodercontrol);
-                pumpintegral = 0;
-                previousError = 0;
-                if(encodercontrol == 3) {//Recipes
-                    recipeName = recipes[currentRecipeIndex].name;
-                    lastPreinfusion = preinfusion;
-                    lastPreinfusionPause = preinfusionPause;
-                    lastBrewTime = brewTime;
-                    preinfusion = 0;            // disable preinfusion time in s
-                    preinfusionPause = 0;       // disable preinfusion pause time in s
-                }
-                else {
-                    preinfusion = lastPreinfusion;            // preinfusion time in s
-                    preinfusionPause = lastPreinfusionPause; // preinfusion pause time in s
-                    brewTime = lastBrewTime;                       // brewtime in s
-                }
-            }
-            LOGF(INFO, "Rotary Encoder Button down for: %lu ms", duration);
-        }
-        encoderSwPressed = false;
-    }
 
     // Every interval, log and reset
     IFLOG(DEBUG) {
@@ -1970,6 +1856,8 @@ void loop() {
         }
     }
 }
+
+
 
 void printLoopTimingsAsList() {
   char buffer[512];  // Make sure this is large enough

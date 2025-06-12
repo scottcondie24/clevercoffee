@@ -20,7 +20,12 @@ void displayWeight(int x, int y, float weight, float setpoint = -1, bool fault =
     u8g2.setCursor(x, y);
     u8g2.print(langstring_weight);
     u8g2.setCursor(x + 50, y);
-    u8g2.print(weight, 1);
+    if(DEBUG_SCALES) {
+       u8g2.print(weight, 3); 
+    }
+    else {
+        u8g2.print(weight, 1);
+    }
 
     if (setpoint > 0) {
         u8g2.print("/");
@@ -160,39 +165,52 @@ void printScreen() {
     u8g2.print(inputPressure, 2);
     u8g2.print(" ");
     u8g2.print(DimmerPower,0);
-    if(encodercontrol == 1) u8g2.print(" Power");
-    if(encodercontrol == 2) u8g2.print(" Pressure");
+    if (menuLevel == 1) {
+        u8g2.print(">");
+    }
+    else {
+       u8g2.print(" ");
+    }
+    if(encodercontrol == 1) u8g2.print("Power");
+    if(encodercontrol == 2) u8g2.print("Pressure");
     if(encodercontrol == 3) {
         if(machineState == kBrew) {
             if(pumpControl == PRESSURE) {
-                u8g2.print(" Pressure");
+                u8g2.print("Pressure");
             }
             else if(pumpControl == FLOW) {
-                u8g2.print(" Flow");
+                u8g2.print("Flow");
             }
             else if(pumpControl == POWER) {
-                u8g2.print(" Power");
+                u8g2.print("Power");
             }
         }
         else {
-            u8g2.print(" Recipe");
+            u8g2.print("Recipe");
         }
     }
-    if(encodercontrol == 4) u8g2.print(" Flow");
-    if(encodercontrol == 5) u8g2.print(" Kp");
-    if(encodercontrol == 6) u8g2.print(" Ki");
-    if(encodercontrol == 7) u8g2.print(" Kd");
-    if(encodercontrol == 8) u8g2.print(" DimMethod");
+    if(encodercontrol == 4) u8g2.print("Flow");
+    if(encodercontrol == 5) u8g2.print("Kp");
+    if(encodercontrol == 6) u8g2.print("Ki");
+    if(encodercontrol == 7) u8g2.print("Kd");
+    if(encodercontrol == 8) u8g2.print("DimMethod");
     u8g2.setCursor(32, 55);
     u8g2.print(pumpFlowRate,1);
     u8g2.print(" mL/s ");
+    if (menuLevel == 2) {
+        u8g2.print(">");
+    }
+    else {
+       u8g2.print(" ");
+    }
+    if(encodercontrol == 1) u8g2.print(DimmerPower,0);
     if(encodercontrol == 2) u8g2.print(setPressure,1);
     if(encodercontrol == 3) {
         if(machineState == kBrew) {
             u8g2.print(phaseName);
         }
         else {
-            displayScrollingSubstring(80, 55, 35, recipeName, false);  // true = bounce, false = wrap
+            displayScrollingSubstring(85, 55, 35, recipeName, false);  // true = bounce, false = wrap
         }
     }
     if(encodercontrol == 4) u8g2.print(setPumpFlowRate,1);
