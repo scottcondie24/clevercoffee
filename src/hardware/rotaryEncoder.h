@@ -121,16 +121,10 @@ void encoderHandler() {
                     }
                 }
                 else if(duration > EncoderSwitchControlInterval) {   //toggle every interval
-                    menuLevel -= 1;
-                    if(menuLevel < 0) {
-                        menuLevel = 2;
-                    }
+                    menuLevel = 0;
                 }
                 else {
-                    menuLevel += 1;
-                    if(menuLevel > 2) {
-                        menuLevel = 0;
-                    }
+                    menuLevel = (menuLevel == 1) ? 2 : 1;
                 }
                 LOGF(INFO, "Rotary Encoder Button down for: %lu ms", duration);
             }

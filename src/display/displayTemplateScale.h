@@ -207,10 +207,11 @@ void printScreen() {
     if(encodercontrol == 2) u8g2.print(setPressure,1);
     if(encodercontrol == 3) {
         if(machineState == kBrew) {
-            u8g2.print(phaseName);
+            //u8g2.print(phaseName);
+            displayScrollingSubstring(83, 55, 38, phaseName, false);  // true = bounce, false = wrap
         }
         else {
-            displayScrollingSubstring(85, 55, 35, recipeName, false);  // true = bounce, false = wrap
+            displayScrollingSubstring(83, 55, 38, recipeName, false);  // true = bounce, false = wrap
         }
     }
     if(encodercontrol == 4) u8g2.print(setPumpFlowRate,1);

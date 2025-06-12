@@ -487,6 +487,8 @@ void displayScrollingSubstring(int x, int y, int displayWidth, const char* text,
     static unsigned long interval = 100;
     static const char* lastText = nullptr;
 
+    if (text == nullptr) return;
+
     // Reset if text has changed
     if (lastText != text) {
         offset = 0;
