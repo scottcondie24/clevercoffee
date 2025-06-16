@@ -15,7 +15,7 @@ extern float pumpFlowRate = 0;
 extern float setPressure = 9.0;
 extern float setPumpFlowRate = 6.0;
 extern PumpControl pumpControl = PRESSURE;
-extern int DimmerPower = 95;
+extern float DimmerPower = 95.0;
 extern float flowKp = 8.0;
 extern float flowKi = 30.0;
 extern float flowKd = 0.0;
@@ -133,16 +133,16 @@ void looppump() {
             PidResults[loopIndexPid][3] = setPumpFlowRate;
             PidResults[loopIndexPid][4] = weightBrewed;
 
-            if(encodercontrol == 1) {   //power
+            if(encoderControl == 1) {   //power
                 pumpControl = POWER;
             }
-            if(encodercontrol == 2) {   //pressure
+            else if(encoderControl == 2) {   //pressure
                 pumpControl = PRESSURE;
             }
-            if(encodercontrol == 3) {   //recipes
+            else if(encoderControl == 3) {   //recipes
                 runRecipe(currentRecipeIndex);
             }
-            else if(encodercontrol >= 4) { //flow and PID tuning
+            else if(encoderControl >= 4) { //flow and PID tuning
                 pumpControl = FLOW;
             }
 

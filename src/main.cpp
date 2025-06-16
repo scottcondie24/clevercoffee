@@ -156,7 +156,7 @@ double lastBrewTime = BREW_TIME;
 
 //encoder menu
 int menuLevel = 0;
-int encodercontrol = ENCODER_CONTROL;
+int encoderControl = ENCODER_CONTROL;
 
 //Pressure Sensor
 #if (FEATURE_PRESSURESENSOR == 1)

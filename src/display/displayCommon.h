@@ -550,3 +550,30 @@ void displayScrollingSubstring(int x, int y, int displayWidth, const char* text,
     u8g2.drawStr(x, y, visible);
 }
 #endif
+
+void drawEncoderControlLabel(U8G2& u8g2) {
+    if (encoderControl < 1 || encoderControl >= encoderControlCount) return;
+
+    const auto& control = encoderControls[encoderControl];
+    u8g2.print(menuLevel == 1 ? ">" : " ");
+    u8g2.print(control.label);
+}
+
+void drawEncoderControlValue(U8G2& u8g2) {
+    if (encoderControl < 1 || encoderControl >= encoderControlCount) return;
+
+    const auto& control = encoderControls[encoderControl];
+    u8g2.print(menuLevel == 2 ? ">" : " ");
+    if (control.value != nullptr) {
+        int precision = (control.id == MENU_KD) ? 2 : (control.id == MENU_POWER) ? 0 : 1;
+        u8g2.print(*control.value, precision);
+    } else if (control.id == MENU_RECIPE) {
+        const char* name = (machineState == kBrew) ? phaseName : recipeName;
+        displayScrollingSubstring(83, 55, 38, name, false);
+#if (FEATURE_PUMP_DIMMER > 0)
+    } else if (control.id == MENU_DIM_METHOD) {
+        PumpDimmerCore::ControlMethod method = pumpRelay.getControlMethod();
+        u8g2.print(controlMethodToString(method));
+    }
+#endif
+}

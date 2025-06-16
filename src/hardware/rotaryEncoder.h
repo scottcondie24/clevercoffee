@@ -6,6 +6,38 @@ unsigned long EncoderSwitchBackflushInterval = 2000;
 unsigned long EncoderSwitchControlInterval = 800;
 bool encoderSwPressed = false;
 
+enum EncoderControlID {
+    MENU_POWER = 1,
+    MENU_PRESSURE,
+    MENU_RECIPE,
+    MENU_FLOW,
+    MENU_KP,
+    MENU_KI,
+    MENU_KD,
+    MENU_DIM_METHOD
+};
+
+struct EncoderControl {
+    EncoderControlID id;
+    const char* label;
+    float* value;
+    float step;
+    float min;
+    float max;
+};
+
+EncoderControl encoderControls[] = {
+    {}, // index 0 is encoder disabled
+    {MENU_POWER,     "Power",     &DimmerPower,      1.0f, 0.0f, 100.0f},
+    {MENU_PRESSURE,  "Pressure",  &setPressure,      0.2f, 4.0f, 10.0f},
+    {MENU_RECIPE,    "Recipe",    nullptr,           1.0f, 0, recipesCount - 1},
+    {MENU_FLOW,      "Flow",      &setPumpFlowRate,  0.2f, 0.0f, 10.0f},
+    {MENU_KP,        "Kp",        &flowKp,           0.2f, 0.0f, 40.0f},
+    {MENU_KI,        "Ki",        &flowKi,           0.2f, 0.0f, 40.0f},
+    {MENU_KD,        "Kd",        &flowKd,           0.01f,0.0f, 4.0f},
+    {MENU_DIM_METHOD,"DimMethod",nullptr,            1.0f, 1, 2}
+};
+const int encoderControlCount = sizeof(encoderControls) / sizeof(EncoderControl);
 
 void initEncoder() {
     ESP32Encoder::useInternalWeakPullResistors = puType::up;
@@ -23,7 +55,28 @@ void encoderHandler() {
 
             if(value != lastencodervalue) {
                 LOGF(INFO, "Rotary Encoder Value: %i", value);
-                if(menuLevel == 1) {
+                if (menuLevel == 1) {
+                    tempvalue = encoderControl + (value - lastencodervalue);
+                    encoderControl = constrain(tempvalue, 1, encoderControlCount - 1);
+                } else if (menuLevel == 2 && encoderControl >= 1 && encoderControl < encoderControlCount) {
+                    const auto& control = encoderControls[encoderControl];
+
+                    if (control.value != nullptr) {
+                        float delta = (value - lastencodervalue) * control.step;
+                        *control.value = constrain(*control.value + delta, control.min, control.max);
+                    } else if (control.id == MENU_RECIPE) { // Recipe selection
+                        currentRecipeIndex = constrain(currentRecipeIndex + (value - lastencodervalue), 0, recipesCount - 1);
+                        recipeName = recipes[currentRecipeIndex].name;
+                        currentPhaseIndex = 0;
+                    } else if (control.id == MENU_DIM_METHOD) { // Dimmer control method
+                        featurePumpDimmer = constrain(featurePumpDimmer + (value - lastencodervalue), 1, 2);
+                    }
+                }
+
+
+
+
+                /*if(menuLevel == 1) {
                     tempvalue = (value-lastencodervalue);
                     tempvalue = encodercontrol + tempvalue;
                     encodercontrol = constrain(tempvalue, 1, 8);    //menus 1 to 8
@@ -45,13 +98,7 @@ void encoderHandler() {
                         brewTime = lastBrewTime;                       // brewtime in s
                     }
                 }
-                
-                
-                
-                
-                
-                
-                
+
                 if(menuLevel == 2) {
                     if(encodercontrol == 1) {
                         tempvalue = DimmerPower + (value-lastencodervalue);
@@ -96,7 +143,9 @@ void encoderHandler() {
                         tempvalue = featurePumpDimmer + tempvalue;
                         featurePumpDimmer = constrain(tempvalue, 1, 2);    //1-2
                     }
-                }
+                }*/
+
+
                 lastencodervalue = value;
             }
         }
