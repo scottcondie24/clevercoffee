@@ -338,9 +338,9 @@ String lastwaterstatedebug = "off";
 #include "brewHandler.h"
 
 //waterHandler has variables used in displays
+#include "hardware/rotaryEncoder.h"
 #include "waterHandler.h"
 
-#include "hardware/rotaryEncoder.h"
 
 // system parameter EEPROM storage wrappers (current value as pointer to variable, minimum, maximum, optional storage ID)
 SysPara<uint8_t> sysParaPidOn(&pidON, 0, 1, STO_ITEM_PID_ON);
@@ -1915,16 +1915,8 @@ void runRecipe(int recipeIndex) {
     static bool phaseReset = false;
 
     BrewRecipe* recipe = &recipes[recipeIndex];
-    BrewPhase* phase = &recipe->phases[currentPhaseIndex];
 
-    if(currentPhaseIndex < recipe->phaseCount) {
-        phaseName = phase->name;
-    }
-    else {
-        return;
-    }
-
-    if (debug_recipe == false) {
+    if (!debug_recipe) {
         debug_recipe = true;
         brewTime = 0;               // disable  brewtime in s
         lastPressure = 0.0;
@@ -1934,132 +1926,146 @@ void runRecipe(int recipeIndex) {
         phaseTiming = 0;
         phaseReset = true;
         LOGF(DEBUG, "Running recipe: %s\n", recipe->name);
-        LOGF(DEBUG, "Phase %d: %s for %.1f seconds", currentPhaseIndex, phase->name, phase->seconds);
     }
 
+    while (currentPhaseIndex < recipe->phaseCount) {
+        BrewPhase* phase = &recipe->phases[currentPhaseIndex];
+        phaseName = phase->name;
 
-    // Transition to next phase if exit condition met
-    bool exitReached = false;
+        // Transition to next phase if exit condition met
+        bool exitReached = false;
 
-    switch (phase->exit_type) {
-        case EXIT_TYPE_NONE:
-            exitReached = (timeBrewed > (phase->seconds)*1000 + phaseTiming);
-            break;
+        switch (phase->exit_type) {
+            case EXIT_TYPE_NONE:
+                exitReached = (timeBrewed > phase->seconds*1000 + phaseTiming);
+                break;
 
-        case EXIT_TYPE_PRESSURE_OVER:
-            exitReached = (inputPressureFilter >= phase->exit_pressure_over);
-            break;
+            case EXIT_TYPE_PRESSURE_OVER:
+                exitReached = (inputPressureFilter >= phase->exit_pressure_over);
+                break;
 
-        case EXIT_TYPE_PRESSURE_UNDER:
-            exitReached = (inputPressureFilter <= phase->exit_pressure_under);
-            break;
+            case EXIT_TYPE_PRESSURE_UNDER:
+                exitReached = (inputPressureFilter <= phase->exit_pressure_under);
+                break;
 
-        case EXIT_TYPE_FLOW_OVER:
-            exitReached = (pumpFlowRate >= phase->exit_flow_over);
-            break;
+            case EXIT_TYPE_FLOW_OVER:
+                exitReached = (pumpFlowRate >= phase->exit_flow_over);
+                break;
 
-        case EXIT_TYPE_FLOW_UNDER:
-            exitReached = (pumpFlowRate <= phase->exit_flow_under);
-            break;
-    }
-    if (phase->weight > 0 && weightBrewed >= phase->weight) {
-        exitReached = true;
-    }
+            case EXIT_TYPE_FLOW_UNDER:
+                exitReached = (pumpFlowRate <= phase->exit_flow_under);
+                break;
+        }
+        if (phase->weight > 0 && weightBrewed >= phase->weight) {
+            exitReached = true;
+        }
 
-    if (exitReached || (timeBrewed > (phase->seconds)*1000 + phaseTiming)) {
-        lastPressure = inputPressureFilter;
-        lastSetPressure = phase->pressure;
-        lastFlow = pumpFlowRate;
-        lastSetFlow = phase->flow;
-        currentPhaseIndex += 1;
-        phaseReset = true;
-        if (currentPhaseIndex < recipe->phaseCount) {
-            phase = &recipe->phases[currentPhaseIndex];
-            LOGF(DEBUG, "Phase %d: %s for %.1f seconds", currentPhaseIndex, phase->name, phase->seconds);
+        if (exitReached || (timeBrewed > phase->seconds*1000 + phaseTiming)) {
+            lastPressure = inputPressureFilter;
+            lastSetPressure = phase->pressure;
+            lastFlow = pumpFlowRate;
+            lastSetFlow = phase->flow;
+            currentPhaseIndex += 1;
             phaseTiming = timeBrewed;
-        } 
+            phaseReset = true;
+            if (currentPhaseIndex < recipe->phaseCount) {
+                //use the recipe->phase method as currentPhaseIndex has been incremented
+                LOGF(DEBUG, "Skipping to Phase %d: %s for %.1f seconds", currentPhaseIndex,
+                     recipe->phases[currentPhaseIndex].name,
+                     recipe->phases[currentPhaseIndex].seconds);
+            } 
+            else {
+                LOG(DEBUG, "Brew recipe complete");
+                brewTime = timeBrewed/1000;
+                return;
+            }
+        }
         else {
-            LOG(DEBUG, "Brew recipe complete");
-            brewTime = timeBrewed/1000;
+            break; // Stay in current phase
         }
     }
 
     // Control logic based on phase settings
 
     //check if still in phases, otherwise skip control
-    if(currentPhaseIndex < recipe->phaseCount) {
-        if (phase->pump == FLOW) {
-            if (phase->transition == TRANSITION_SMOOTH) {
-                if(phaseReset) {
-                    if(pumpControl != phase->pump) {    //reset PID
-                        pumpintegral = pumpintegral * (pressureKi/flowKi);
-                        previousError = 0;
-                        pumpControl = FLOW;
-                    }
-                    else {
-                        lastFlow = lastSetFlow; //if already in FLOW mode then continue from last requested flow rate, otherwise use last measured as starting point
-                    }
-                    phaseReset = false;
-                }
-                float elapsed = (timeBrewed - phaseTiming) / 1000.0;
-                float t = elapsed / phase->seconds;
-                if (t > 1.0) t = 1.0;
-                setPumpFlowRate = lastFlow + (phase->flow - lastFlow) * t;
-            } 
-            else {
-                if(phaseReset) {
-                    pumpintegral = 0;
-                    previousError = 0;
-                    phaseReset = false;
-                }
-                pumpControl = FLOW;
-                setPumpFlowRate = phase->flow;
-            }
-            setPressure = 0;
+    if (currentPhaseIndex >= recipe->phaseCount) return;
+
+    BrewPhase* phase = &recipe->phases[currentPhaseIndex];
+
+    if(phaseReset) {
+        LOGF(DEBUG, "Phase %d: %s for %.1f seconds", currentPhaseIndex, phase->name, phase->seconds);
+        if (phase->transition == TRANSITION_SMOOTH) {
+            LOGF(WARNING, "Phase '%s' duration (%.2f s) is less than recommended minimum of 1 second for smooth transitions", phase->name, phase->seconds);
         }
-        else if (phase->pump == PRESSURE) {
-            if (phase->transition == TRANSITION_SMOOTH) {
-                if(phaseReset) {
-                    if(pumpControl != phase->pump) {    //reset PID
-                        pumpintegral = pumpintegral * (flowKi/pressureKi);
-                        previousError = 0;
-                        pumpControl = PRESSURE;
-                    }
-                    else {
-                        lastPressure = lastSetPressure; //if already in PRESSURE mode then continue from last requested pressure, otherwise use last measured as starting point
-                    }
-                    phaseReset = false;
-                }
-                float elapsed = (timeBrewed - phaseTiming) / 1000.0;
-                float t = elapsed / phase->seconds;
-                if (t > 1.0) t = 1.0;
-                setPressure = lastPressure + (phase->pressure - lastPressure) * t;
-            } 
-            else {
-                if(phaseReset) {
-                    pumpintegral = 0;
+    }
+
+    if (phase->pump == FLOW) {
+        if (phase->transition == TRANSITION_SMOOTH) {
+            if(phaseReset) {
+                if(pumpControl != phase->pump) {    //reset PID
+                    pumpintegral = pumpintegral * (pressureKi/flowKi);
                     previousError = 0;
-                    phaseReset = false;
+                    pumpControl = FLOW;
                 }
-                pumpControl = PRESSURE;
-                setPressure = phase->pressure;
+                else {
+                    lastFlow = lastSetFlow; //if already in FLOW mode then continue from last requested flow rate, otherwise use last measured as starting point
+                }
+                phaseReset = false;
             }
+            float elapsed = (timeBrewed - phaseTiming) / 1000.0;
+            float t = min(elapsed / phase->seconds, 1.0f);
+            setPumpFlowRate = lastFlow + (phase->flow - lastFlow) * t;
+        } 
+        else {
+            if(phaseReset) {
+                pumpintegral = 0;
+                previousError = 0;
+                phaseReset = false;
+            }
+            pumpControl = FLOW;
+            setPumpFlowRate = phase->flow;
+        }
+        setPressure = 0;
+    }
+    else if (phase->pump == PRESSURE) {
+        if (phase->transition == TRANSITION_SMOOTH) {
+            if(phaseReset) {
+                if(pumpControl != phase->pump) {    //reset PID
+                    pumpintegral = pumpintegral * (flowKi/pressureKi);
+                    previousError = 0;
+                    pumpControl = PRESSURE;
+                }
+                else {
+                    lastPressure = lastSetPressure; //if already in PRESSURE mode then continue from last requested pressure, otherwise use last measured as starting point
+                }
+                phaseReset = false;
+            }
+            float elapsed = (timeBrewed - phaseTiming) / 1000.0;
+            float t = min(elapsed / phase->seconds, 1.0f);
+            setPressure = lastPressure + (phase->pressure - lastPressure) * t;
+        } 
+        else {
+            if(phaseReset) {
+                pumpintegral = 0;
+                previousError = 0;
+                phaseReset = false;
+            }
+            pumpControl = PRESSURE;
+            setPressure = phase->pressure;
+        }
+        setPumpFlowRate = 0;
+    }
+    else {
+        // Fallback: infer from pressure/flow, but shouldnt ever get here
+        if(phase->pressure > 0) {
+            pumpControl = PRESSURE;
+            setPressure = phase->pressure;
             setPumpFlowRate = 0;
         }
-            // otherwise run old settings for next phase
-
-
-        else {  //shouldnt ever get here
-            if(phase->pressure > 0) {
-                pumpControl = PRESSURE;
-                setPressure = phase->pressure;
-                setPumpFlowRate = 0;
-            }
-            else {
-                pumpControl = FLOW;
-                setPumpFlowRate = phase->flow;
-                setPressure = 0;
-            }
+        else {
+            pumpControl = FLOW;
+            setPumpFlowRate = phase->flow;
+            setPressure = 0;
         }
     }
 }

@@ -3,24 +3,12 @@
  *
  * @brief Handler for digital hot water switch
  */
+#include "hardware/rotaryEncoder.h"
 
 uint8_t currStateWaterSwitch;
 
 //Pump  //these shouldnt need to be volatile as no interrupts
 
-//variables used outside waterHandler.h
-
-extern float inputPressure = 0;
-extern float pumpFlowRate = 0;
-extern float setPressure = 9.0;
-extern float setPumpFlowRate = 6.0;
-extern PumpControl pumpControl = PRESSURE;
-extern float DimmerPower = 95.0;
-extern float flowKp = 8.0;
-extern float flowKi = 30.0;
-extern float flowKd = 0.0;
-extern float pumpintegral = 0.0;
-extern float previousError = 0;
 
 float pressureKp = 20.0;//   18.0;//18.0;//13.0;//14.0;//   20.0;    //25.0;//30.0;    // Proportional gain
 float pressureKi = 10.0;//  9.0;//8.0;//4.0;//5.0;//   10.0;   //45.0;//75.0;     // Integral gain
@@ -31,7 +19,6 @@ unsigned long currentMillisPumpControl = 0;
 unsigned long previousMillisPumpControl = 0;
 unsigned long pumpControlInterval = 50;
 unsigned long maxPumpControlInterval = 100;
-int featurePumpDimmer = FEATURE_PUMP_DIMMER;
 
 unsigned long blockMQTTInterval = 10000;
 unsigned long blockWebsiteInterval = 40000;
@@ -133,30 +120,49 @@ void looppump() {
             PidResults[loopIndexPid][3] = setPumpFlowRate;
             PidResults[loopIndexPid][4] = weightBrewed;
 
-            if(encoderControl == 1) {   //power
+            const auto& control = encoderControls[encoderControl];
+            if (control.id == MENU_POWER) {
                 pumpControl = POWER;
             }
-            else if(encoderControl == 2) {   //pressure
+            else if (control.id == MENU_PRESSURE) {
                 pumpControl = PRESSURE;
             }
-            else if(encoderControl == 3) {   //recipes
+            else if (control.id == MENU_RECIPE) {
                 runRecipe(currentRecipeIndex);
             }
-            else if(encoderControl >= 4) { //flow and PID tuning
+            else if (control.id >= MENU_FLOW) {
+                pumpControl = FLOW;
+            }
+
+            //override for flush and backflush
+            if(machineState == kBackflush) {
+                pumpControl = PRESSURE;
+            }
+            if(machineState == kManualFlush) {
                 pumpControl = FLOW;
             }
 
 
             if(pumpControl == PRESSURE) {   //pressure
                 inputPID = inputPressureFilter;//inputPressure;
-                targetPID = setPressure;
+                if(machineState == kBackflush) {
+                    targetPID = 9.0;
+                }
+                else {
+                    targetPID = setPressure;
+                }
                 inputKp = pressureKp;
                 inputKi = pressureKi;
                 inputKd = pressureKd;
             }
             else if (pumpControl == FLOW) { //flow and PID tuning
                 inputPID = pumpFlowRate;
-                targetPID = setPumpFlowRate;
+                if(machineState == kManualFlush) {
+                    targetPID = 8.0;
+                }
+                else {
+                    targetPID = setPumpFlowRate;
+                }
                 inputKp = flowKp;
                 inputKi = flowKi;
                 inputKd = flowKd;

@@ -6,6 +6,21 @@ unsigned long EncoderSwitchBackflushInterval = 2000;
 unsigned long EncoderSwitchControlInterval = 800;
 bool encoderSwPressed = false;
 
+//variables used outside waterHandler.h
+
+extern float inputPressure = 0;
+extern float pumpFlowRate = 0;
+extern float setPressure = 9.0;
+extern float setPumpFlowRate = 6.0;
+extern PumpControl pumpControl = PRESSURE;
+extern float DimmerPower = 95.0;
+extern float flowKp = 8.0;
+extern float flowKi = 30.0;
+extern float flowKd = 0.0;
+extern float pumpintegral = 0.0;
+extern float previousError = 0;
+extern int featurePumpDimmer = FEATURE_PUMP_DIMMER;
+
 enum EncoderControlID {
     MENU_POWER = 1,
     MENU_PRESSURE,
@@ -58,6 +73,23 @@ void encoderHandler() {
                 if (menuLevel == 1) {
                     tempvalue = encoderControl + (value - lastencodervalue);
                     encoderControl = constrain(tempvalue, 1, encoderControlCount - 1);
+                    pumpintegral = 0;
+                    previousError = 0;
+                    const auto& control = encoderControls[encoderControl];
+                    if (control.id == MENU_RECIPE) {
+                        recipeName = recipes[currentRecipeIndex].name;
+                        lastPreinfusion = preinfusion;
+                        lastPreinfusionPause = preinfusionPause;
+                        lastBrewTime = brewTime;
+                        preinfusion = 0;            // disable preinfusion time in s
+                        preinfusionPause = 0;       // disable preinfusion pause time in s
+                        LOGF(INFO, "Recipe Index: %i -- Recipe Name: %s", currentRecipeIndex, recipeName);
+                    }
+                    else {
+                        preinfusion = lastPreinfusion;            // preinfusion time in s
+                        preinfusionPause = lastPreinfusionPause; // preinfusion pause time in s
+                        brewTime = lastBrewTime;                       // brewtime in s
+                    }  
                 } else if (menuLevel == 2 && encoderControl >= 1 && encoderControl < encoderControlCount) {
                     const auto& control = encoderControls[encoderControl];
 
@@ -68,84 +100,11 @@ void encoderHandler() {
                         currentRecipeIndex = constrain(currentRecipeIndex + (value - lastencodervalue), 0, recipesCount - 1);
                         recipeName = recipes[currentRecipeIndex].name;
                         currentPhaseIndex = 0;
+                        LOGF(INFO, "Recipe Index: %i -- Recipe Name: %s", currentRecipeIndex, recipeName);
                     } else if (control.id == MENU_DIM_METHOD) { // Dimmer control method
                         featurePumpDimmer = constrain(featurePumpDimmer + (value - lastencodervalue), 1, 2);
                     }
                 }
-
-
-
-
-                /*if(menuLevel == 1) {
-                    tempvalue = (value-lastencodervalue);
-                    tempvalue = encodercontrol + tempvalue;
-                    encodercontrol = constrain(tempvalue, 1, 8);    //menus 1 to 8
-
-                    LOGF(INFO, "Rotary Encoder Mode Changed: %i", encodercontrol);
-                    pumpintegral = 0;
-                    previousError = 0;
-                    if(encodercontrol == 3) {//Recipes
-                        recipeName = recipes[currentRecipeIndex].name;
-                        lastPreinfusion = preinfusion;
-                        lastPreinfusionPause = preinfusionPause;
-                        lastBrewTime = brewTime;
-                        preinfusion = 0;            // disable preinfusion time in s
-                        preinfusionPause = 0;       // disable preinfusion pause time in s
-                    }
-                    else {
-                        preinfusion = lastPreinfusion;            // preinfusion time in s
-                        preinfusionPause = lastPreinfusionPause; // preinfusion pause time in s
-                        brewTime = lastBrewTime;                       // brewtime in s
-                    }
-                }
-
-                if(menuLevel == 2) {
-                    if(encodercontrol == 1) {
-                        tempvalue = DimmerPower + (value-lastencodervalue);
-                        DimmerPower = constrain(tempvalue, 0, 100);
-                    }
-                    else if(encodercontrol == 2) {
-                        tempvalue = (value-lastencodervalue)/5.0;
-                        tempvalue = setPressure + tempvalue;
-                        setPressure = constrain(tempvalue, 4.0, 10.0);    //4-10
-                    }
-                    else if(encodercontrol == 3) {
-                        tempvalue = (value-lastencodervalue); 
-                        tempvalue = currentRecipeIndex + tempvalue;
-                        currentRecipeIndex = constrain(tempvalue, 0.0, recipesCount - 1);    //0-recipesCount
-                        currentPhaseIndex = 0;
-                        recipeName = recipes[currentRecipeIndex].name;
-
-                        LOGF(INFO, "Recipe Index: %i -- Recipe Name: %s", currentRecipeIndex, recipeName);
-                    }
-                    else if(encodercontrol == 4) {
-                        tempvalue = (value-lastencodervalue)/5.0; 
-                        tempvalue = setPumpFlowRate + tempvalue;
-                        setPumpFlowRate = constrain(tempvalue, 0.0, 10.0);    //0-10
-                    }
-                    else if(encodercontrol == 5) {
-                        tempvalue = (value-lastencodervalue)/5.0; 
-                        tempvalue = flowKp + tempvalue;
-                        flowKp = constrain(tempvalue, 0.0, 40.0);    //0-40
-                    }
-                    else if(encodercontrol == 6) {
-                        tempvalue = (value-lastencodervalue)/5.0; 
-                        tempvalue = flowKi + tempvalue;
-                        flowKi = constrain(tempvalue, 0.0, 40.0);    //0-40
-                    }
-                    else if(encodercontrol == 7) {
-                        tempvalue = (value-lastencodervalue)/100.0; 
-                        tempvalue = flowKd + tempvalue;
-                        flowKd = constrain(tempvalue, 0.0, 4.0);    //0-4
-                    }
-                    else if(encodercontrol == 8) {
-                        tempvalue = (value-lastencodervalue); 
-                        tempvalue = featurePumpDimmer + tempvalue;
-                        featurePumpDimmer = constrain(tempvalue, 1, 2);    //1-2
-                    }
-                }*/
-
-
                 lastencodervalue = value;
             }
         }

@@ -237,7 +237,7 @@ void mqtt_callback(char* topic, byte* data, unsigned int length) {
  * @param continueOnError Flag to specify whether to continue publishing messages in case of an error (default: true)
  * @return 0 = success, MQTT error code = failure
  */
-int writeSysParamsToMQTT(bool continueOnError = true) {
+/*int writeSysParamsToMQTT(bool continueOnError = true) {
     unsigned long currentMillisMQTT = millis();
 
     unsigned long interval =
@@ -316,7 +316,99 @@ int writeSysParamsToMQTT(bool continueOnError = true) {
     }
 
     return 0;
+}*/
+
+int writeSysParamsToMQTT(bool continueOnError = true) {
+    static auto mqttVarsIt = mqttVars.begin();
+    static auto mqttSensorsIt = mqttSensors.begin();
+    static bool inSensors = false;
+
+    unsigned long now = millis();
+
+    unsigned long interval =
+        (machineState == kBrew)    ? intervalMQTTbrew :
+        (machineState == kStandby) ? intervalMQTTstandby :
+                                     intervalMQTT;
+
+    if ((now - previousMillisMQTT < interval) || FEATURE_MQTT != 1) {
+        return 0;
+    }
+
+    if (!mqtt.connected()) return 0;
+
+    if (!inSensors && mqttVarsIt == mqttVars.begin()) {
+        previousMillisMQTT = now;
+        mqtt_publish("status", (char*)"online");
+    }
+    mqtt_update = true;
+
+    unsigned long timeBudget = 10; // milliseconds to spend in this call
+    unsigned long start = millis();
+    char buffer[32];
+    int errorState = 0;
+
+    // Process mqttVars
+    if (!inSensors) {
+        while (mqttVarsIt != mqttVars.end()) {
+            editable_t* e = mqttVarsIt->second();
+
+            switch (e->type) {
+                case kFloat:       snprintf(buffer, sizeof(buffer), "%.2f", *(float*)e->ptr); break;
+                case kDouble:
+                case kDoubletime:  snprintf(buffer, sizeof(buffer), "%.2f", *(double*)e->ptr); break;
+                case kInteger:     snprintf(buffer, sizeof(buffer), "%d", *(int*)e->ptr); break;
+                case kUInt8:       snprintf(buffer, sizeof(buffer), "%u", *(uint8_t*)e->ptr); break;
+                case kCString:     snprintf(buffer, sizeof(buffer), "%s", (char*)e->ptr); break;
+                default:           ++mqttVarsIt; continue;
+            }
+
+            std::string topic = mqttVarsIt->first;
+            std::string value = std::string(buffer);
+
+            if (mqttLastSent[topic] != value) {
+                if (mqtt_publish(topic.c_str(), buffer, true)) {
+                    mqttLastSent[topic] = value;
+                } else {
+                    errorState = mqtt.state();
+                    if (errorState != 0 && !continueOnError) return errorState;
+                }
+            }
+
+            ++mqttVarsIt;
+            if (millis() - start >= timeBudget) return 0; // Return early, continue next time
+        }
+
+        // Done with mqttVars
+        mqttVarsIt = mqttVars.begin();
+        inSensors = true;
+    }
+
+    // Process mqttSensors
+    while (mqttSensorsIt != mqttSensors.end()) {
+        snprintf(buffer, sizeof(buffer), "%.2f", mqttSensorsIt->second());
+        std::string topic = mqttSensorsIt->first;
+        std::string value = std::string(buffer);
+
+        if (mqttLastSent[topic] != value) {
+            if (mqtt_publish(topic.c_str(), buffer)) {
+                mqttLastSent[topic] = value;
+            } else {
+                errorState = mqtt.state();
+                if (errorState != 0 && !continueOnError) return errorState;
+            }
+        }
+
+        ++mqttSensorsIt;
+        if (millis() - start >= timeBudget) return 0; // Return early, continue next time
+    }
+
+    // Done with both loops
+    mqttSensorsIt = mqttSensors.begin();
+    inSensors = false;
+
+    return errorState;
 }
+
 
 /**
  * @brief Generate a switch device for Home Assistant MQTT discovery
