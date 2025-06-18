@@ -1999,13 +1999,19 @@ void runRecipe(int recipeIndex) {
         }
     }
 
+
+    flowPressureCeiling = phase->max_flow_or_pressure;
+    flowPressureRange = phase->max_flow_or_pressure_range;
     if (phase->pump == FLOW) {
         if (phase->transition == TRANSITION_SMOOTH) {
             if(phaseReset) {
-                if(pumpControl != phase->pump) {    //reset PID
+                if(pumpControl == PRESSURE) {    //scale integral error if pumpControl was PRESSURE
                     pumpintegral = pumpintegral * (pressureKi/flowKi);
                     previousError = 0;
                     pumpControl = FLOW;
+                    if(lastSetFlow > 0) {   //if a flow rate was specified in a pressure phase, start a smooth transition from here
+                        lastFlow = lastSetFlow;
+                    }
                 }
                 else {
                     lastFlow = lastSetFlow; //if already in FLOW mode then continue from last requested flow rate, otherwise use last measured as starting point
@@ -2030,10 +2036,13 @@ void runRecipe(int recipeIndex) {
     else if (phase->pump == PRESSURE) {
         if (phase->transition == TRANSITION_SMOOTH) {
             if(phaseReset) {
-                if(pumpControl != phase->pump) {    //reset PID
+                if(pumpControl == FLOW) {    //scale integral error if pumpControl was FLOW
                     pumpintegral = pumpintegral * (flowKi/pressureKi);
                     previousError = 0;
                     pumpControl = PRESSURE;
+                    if ( lastSetPressure > 0) { //if a pressure was specified in a flow phase, start a smooth transition from here
+                        lastPressure = lastSetPressure;
+                    }
                 }
                 else {
                     lastPressure = lastSetPressure; //if already in PRESSURE mode then continue from last requested pressure, otherwise use last measured as starting point

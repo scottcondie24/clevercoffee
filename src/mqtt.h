@@ -19,7 +19,7 @@ std::map<std::string, std::string> mqttLastSent;
 unsigned long previousMillisMQTT;
 const unsigned long intervalMQTT = 5000;
 const unsigned long intervalMQTTbrew = 500;
-const unsigned long intervalMQTTstandby = 10000;
+const unsigned long intervalMQTTstandby = 5000;
 
 WiFiClient net;
 PubSubClient mqtt(net);

@@ -14,12 +14,12 @@ const int springLeverPhasesCount = sizeof(springLeverPhases) / sizeof(BrewPhase)
 
 BrewPhase londiniumPhases[] = {
         //0    1   2   3   4    5  6   7    8   9  10  11   12       13                     14               15
-    {"pause", 0, 0, 0, 88.0, 0, 0, 0, 0, 0, 0, 0, 1.0, EXIT_TYPE_NONE, TRANSITION_FAST, FLOW},  //wait for weightBrewed to be reset
-    {"fill", 0, 8.0, 0, 88.0, 5.0, 0, 0.0, 3.0, 0, 0, 0.0, 20.0, EXIT_TYPE_PRESSURE_OVER, TRANSITION_FAST, FLOW},
-    {"infuse", 3.0, 0.0, 0, 88.0, 4.0, 0, 0, 0, 0, 0, 0.0, 30.0, EXIT_TYPE_NONE, TRANSITION_FAST, PRESSURE},        //exits at 4g
-    {"pressure ramp", 8.6, 0.0, 0, 88.0, 0, 0, 1.7, 0.0, 0.0, 0.0, 0.0, 2.0, EXIT_TYPE_FLOW_OVER, TRANSITION_SMOOTH, PRESSURE}, //ramp so OPV doesnt immediately open
-    {"pressure", 8.6, 0.0, 0, 88.0, 0, 0, 1.7, 0.0, 0.0, 0.0, 0.0, 60.0, EXIT_TYPE_FLOW_OVER, TRANSITION_FAST, PRESSURE},
-    {"maintain flow", 0.0, 1.7, 0, 88.0, 50.0, 0, 0, 0, 0, 0.0, 0.0, 30.0, EXIT_TYPE_NONE, TRANSITION_FAST, FLOW},    //exits at 50g
+    {"pause", 0, 0, 0, 88.0, 0, 0, 0, 0, 0, 0.0, 0.0, 1.0, EXIT_TYPE_NONE, TRANSITION_FAST, FLOW},  //wait for weightBrewed to be reset
+    {"fill", 0, 8.0, 0, 88.0, 5.0, 0, 0.0, 3.0, 0, 0.0, 0.0, 20.0, EXIT_TYPE_PRESSURE_OVER, TRANSITION_FAST, FLOW},
+    {"infuse", 3.0, 1.7, 0, 88.0, 4.0, 0, 0, 0, 0, 8.5, 5.0, 30.0, EXIT_TYPE_NONE, TRANSITION_FAST, PRESSURE},        //exits at 4g
+    //{"pressure ramp", 8.6, 0.0, 0, 88.0, 0, 0, 1.7, 0.0, 0.0, 0.0, 0.0, 2.0, EXIT_TYPE_FLOW_OVER, TRANSITION_SMOOTH, PRESSURE}, //ramp so OPV doesnt immediately open
+    //{"pressure", 8.6, 1.7, 0, 88.0, 0, 0, 1.7, 0.0, 0.0, 0.0, 0.0, 60.0, EXIT_TYPE_FLOW_OVER, TRANSITION_SMOOTH, PRESSURE},
+    {"maintain flow", 0.0, 1.7, 0, 88.0, 50.0, 0, 0, 0, 0, 8.0, 0.5, 80.0, EXIT_TYPE_NONE, TRANSITION_SMOOTH, FLOW},    //exits at 50g
 };
 const int londiniumPhasesCount = sizeof(londiniumPhases) / sizeof(BrewPhase);
 
@@ -87,3 +87,44 @@ BrewRecipe recipes[] = {
 };
 
 const int recipesCount = sizeof(recipes) / sizeof(BrewRecipe);
+
+
+//these recipes could be written like this for better visibility
+
+/*BrewPhase londiniumPhases[] = {
+    {
+        .name = "pause",
+        .pressure = 0,
+        .flow = 0,
+        .volume = 0,
+        .temperature = 88.0,
+        .weight = 0,
+        .exit_flow_under = 0,
+        .exit_flow_over = 0,
+        .exit_pressure_over = 0,
+        .exit_pressure_under = 0,
+        .max_flow_or_pressure = 0,
+        .max_flow_or_pressure_range = 0,
+        .seconds = 1.0,
+        .exit_type = EXIT_TYPE_NONE,
+        .transition = TRANSITION_FAST,
+        .pump = FLOW,
+    },
+    {
+        .name = "fill",
+        .pressure = 0,
+        .flow = 8.0,
+        .volume = 0,
+        .temperature = 88.0,
+        .weight = 5.0,
+        .exit_flow_under = 0,
+        .exit_flow_over = 0.0,
+        .exit_pressure_over = 3.0,
+        .exit_pressure_under = 0,
+        .max_flow_or_pressure = 0,
+        .max_flow_or_pressure_range = 0.0,
+        .seconds = 20.0,
+        .exit_type = EXIT_TYPE_PRESSURE_OVER,
+        .transition = TRANSITION_FAST,
+        .pump = FLOW,
+    },*/

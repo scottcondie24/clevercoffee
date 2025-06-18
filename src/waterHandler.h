@@ -26,6 +26,9 @@ unsigned long blockDisplayInterval = 12000;
 unsigned long blockStart = 0;
 float pumpdt = pumpControlInterval / 1000.0;  // Time step in seconds
 
+float flowPressureCeiling = 0;
+float flowPressureRange = 0;
+
 
 
 void checkWaterSwitch() {
@@ -90,10 +93,25 @@ void waterHandler(void){
     }
 }
 
+float applySmoothOverride(float target, float input, float ceiling, float range, int curve = 1) {
+    if (ceiling > 0 && range > 0 && input > ceiling) {
+        float t = (input - ceiling) / range;
+        t = constrain(t, 0.0f, 1.0f);
+        if (curve == 2) t = t * t;         // quadratic
+        else if (curve == 3) t = t * t * t; // cubic
+        //reset integral to reduce windup, could be harsh
+        //pumpintegral = 0;
+        return target * (1.0f - t);
+    }
+    return target;
+}
+
 void looppump() {
     if(machineState != kBrew) { //moved here from recipes
         debug_recipe = false;
         currentPhaseIndex = 0;
+        flowPressureCeiling = 0.0;
+        flowPressureRange = 0.0;
     }
 #if (FEATURE_PUMP_DIMMER > 0) 
     static float inputPID = 0.0;
@@ -126,12 +144,19 @@ void looppump() {
             }
             else if (control.id == MENU_PRESSURE) {
                 pumpControl = PRESSURE;
+                //testing flow limits
+                //flowPressureCeiling = 8.0; //flow mL/s
+                //flowPressureRange = 6.0;    //reduce to 0 output over 14mL/s
             }
             else if (control.id == MENU_RECIPE) {
-                runRecipe(currentRecipeIndex);
+                if(machineState == kBrew) {
+                    runRecipe(currentRecipeIndex);
+                }
             }
             else if (control.id >= MENU_FLOW) {
                 pumpControl = FLOW;
+                flowPressureCeiling = 9.0; //pressure bar
+                flowPressureRange = 0.2;    //reduce to 0 output over 9.2bar
             }
 
             //override for flush and backflush
@@ -145,24 +170,19 @@ void looppump() {
 
             if(pumpControl == PRESSURE) {   //pressure
                 inputPID = inputPressureFilter;//inputPressure;
-                if(machineState == kBackflush) {
-                    targetPID = 9.0;
-                }
-                else {
-                    targetPID = setPressure;
-                }
+                targetPID = (machineState == kBackflush) ? 9.0f : setPressure;
+                // Smooth flow override, doesnt work well in pressure
+                targetPID = applySmoothOverride(targetPID, pumpFlowRate, flowPressureCeiling, flowPressureRange, 2);  //1 is linear reduction, 2 quadratic, 3 cubic
                 inputKp = pressureKp;
                 inputKi = pressureKi;
                 inputKd = pressureKd;
             }
             else if (pumpControl == FLOW) { //flow and PID tuning
                 inputPID = pumpFlowRate;
-                if(machineState == kManualFlush) {
-                    targetPID = 8.0;
-                }
-                else {
-                    targetPID = setPumpFlowRate;
-                }
+                targetPID = (machineState == kManualFlush) ? 10.0f : setPumpFlowRate;
+                // Smooth pressure override
+                targetPID = applySmoothOverride(targetPID, inputPressureFilter, flowPressureCeiling, flowPressureRange, 2);  //1 is linear reduction, 2 quadratic, 3 cubic
+                
                 inputKp = flowKp;
                 inputKi = flowKi;
                 inputKd = flowKd;
